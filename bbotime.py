@@ -159,35 +159,37 @@ def printMap():
 def printHeader():
     print('Round             ', end='')
     for r in range(1, int(args.boards/args.bpr) + 1):
-        print('    %2d     ' % (r), end='')
+        print(f'    {r:2}     ', end='')
     print('     Totals')
 
 def printPersonSummary(player):
     print()
-    print('%15s  |  ' % (player), end = '')
-    roundTime = 0
+    print(f'{player:>15}  |  ', end = '')
+    roundMins = 0
     totalPlay = 0
     totalWait = 0
     for bdnum in range(1, args.boards+1):
         tline = map[bdnum][player]
-        roundTime = roundTime + tline.iElapsed
+        roundMins = roundMins + tline.iElapsed
+        waitMins = int(tline.waitMins())
         if bdnum % args.bpr == 0:
-            print('%2d +%2d  |  ' % (roundTime, tline.waitMins()), end='')
-            totalPlay = totalPlay + roundTime
-            totalWait = totalWait + tline.waitMins()
-            roundTime = 0
-    print('  %3d + %2d' % (totalPlay, totalWait))
+            print(f'{roundMins:2} +{waitMins:2}  |  ', end='')
+            totalPlay = totalPlay + roundMins
+            totalWait = totalWait + waitMins
+            roundMins = 0
+    print(f'  {totalPlay:3} + {totalWait:2}')
 
     
 def parseFile(n):
-    fname1 = '%s/hands (%d).html' % (args.dir, n)
-    fname2 = '%s/T%d.html' % (args.dir, n)
+    # two different naming options supported
+    fname1 = f'{args.dir}/hands ({n}).html'
+    fname2 = f'{args.dir}/T{n}.html'
     fname = fname1 if os.path.isfile(fname1) else fname2
     file = open(fname)
     html_doc = file.read()
 
     if args.debug:
-        print('---- Handling Traveller File %s for Board %d ----' % (fname, n))
+        print(f'---- Handling Traveller File {fname} for Board {n} ----')
         
 
     soup = BeautifulSoup(html_doc, 'html.parser')
@@ -240,12 +242,12 @@ if args.bpr is None:
 if args.tstart is None:
     head, sep, tail = args.dir.partition('-')
     if head == 'travs':
-        args.tstart = '%s 15:00' % (tail)
+        args.tstart = tail + ' 15:00'
 
 initMap()
 
 if False:
-    print('%s' % (args.__dict__))
+    print(args.__dict__)
     sys.exit(1)
 
 
@@ -278,7 +280,7 @@ for bdnum in range (1, args.boards + 1):
 if args.debug:
     printMap()
 
-print('---------- Unclocked Report for game of %s ----------------\n' % (args.tstart))
+print(f'---------- Unclocked Report for game of {args.tstart} ----------------\n')
 
 printHeader()
 for p in sorted(players.keys()):
@@ -302,7 +304,7 @@ if args.simclocked:
             nextEndTime[player] = nextEndTime[player] + tline.iElapsed * 60
             tline.iEndTime = nextEndTime[player]
             if args.debug:
-                print('bdnum %d, player %s, %s' % (bdnum, player, tline))
+                print(f'bdnum {bdnum}, player {player}, {tline}')
 
         # if it's the last board in the round, now have proper iEndTime
         # and we can compute WaitEndTime for last tline in Round
