@@ -21,15 +21,21 @@ import json
 import time
 import argparse
 import os
+import itertools
+from pprint import pprint
 
 global args
 
+travTableData = []
 map = {}
 players = {}
 partners = {}
 opps = {}
 oppositeDir = {'North' : 'South',
                'East' : 'West'}
+
+gibName = 'GiB'
+robotData = {}
 
 def parse_args():
     parser = argparse.ArgumentParser(description='BBO Tourney Time Analysis')
@@ -39,7 +45,9 @@ def parse_args():
     parser.add_argument('--bpr', type=int, default=None, help='boards per round')
     parser.add_argument('--tstart',  default=None, help='tournament start date/time')
     parser.add_argument('--dir',  help='directory containing traveler html records')
-    parser.add_argument('--simclocked', default=False, action='store_true', help='afterwards simulate as if clocked had been used') 
+    parser.add_argument('--simclocked', default=False, action='store_true', help='afterwards simulate as if clocked had been used')
+
+    parser.add_argument('--robotScores', type=float, nargs='*', default=None, help='supply robot scores to help differentiate between robots which all have the same name') 
     parser.add_argument('--debug', default=False, action='store_true', help='print some debug info') 
     return parser.parse_args()
 
@@ -173,7 +181,7 @@ def printPersonSummary(player):
         roundMins = roundMins + tline.iElapsed
         waitMins = int(tline.waitMins())
         if bdnum % args.bpr == 0:
-            print(f'{roundMins:2} +{waitMins:2}  |  ', end='')
+            print(f'{int(roundMins):2} +{int(waitMins):2}  |  ', end='')
             totalPlay = totalPlay + roundMins
             totalWait = totalWait + waitMins
             roundMins = 0
@@ -222,11 +230,53 @@ def parseFile(n):
     # print(json.dumps(table_data, indent=4))
     return table_data
 
+# builds list of tuples of bdnum and table_data (array of trav rows for that bdnum)
+def readAllTravFiles():
+    for bdnum in range(1, args.boards+1):
+        table_data = parseFile(bdnum)
+        travTableData.append((bdnum, table_data))
+
+def initRobotData():
+    for rndnum in range(1, int(args.boards/args.bpr) + 1):
+        robotData[rndnum] = {}
+        
+                     
+def addRobotScores(bdnum, row, dir):
+    # robotData will be keyed by roundnum and oppName
+    # and the direction which helps if robot is playing robot
+    rndnum = int((bdnum-1)/args.bpr) + 1
+    oppdir = 'East' if dir == 'North' else 'North'
+    key = f'{dir} vs. {row[oppdir].lower()}'
+    if robotData[rndnum].get(key) == None:
+        robotData[rndnum][key] = []
+    # add the score
+    fscore = float(row['Score'][:-1])  # strip % sign off end
+    if dir == 'East':
+        fscore = 100.0 - fscore
+    robotData[rndnum][key].append(fscore)
+    # print(bdnum, dir, robotData)
+    
+def buildRobotData(bdnum, row):
+    # only do this if one of the two pairs is a robot pair
+    for dir in ['North', 'East']:
+        if row[dir] == gibName and row[oppositeDir[dir]] == gibName:
+            addRobotScores(bdnum, row, dir)
+
+def robKeyOppNamesUnique(keylist):
+    oppMap = {}
+    for key in keylist:
+        oppname = key.split(' vs. ')[1]
+        if oppMap.get(oppname) is None:
+            oppMap[oppname] = 1
+        else:
+            return False
+    # if we get this far, success
+    return True
 
 
 #-------- main stuff starts here -----------
 args = parse_args()
-
+    
 # with no explicit boards count, count files in directory
 if args.boards is None:
     args.boards = len([name for name in os.listdir(args.dir) if os.path.isfile(os.path.join(args.dir, name))])
@@ -244,21 +294,75 @@ if args.tstart is None:
     if head == 'travs':
         args.tstart = tail + ' 15:00'
 
-initMap()
-
 if False:
     print(args.__dict__)
     sys.exit(1)
 
+initMap()
+#read all traveler files into travTableData
+readAllTravFiles()
 
-for bdnum in range(1, args.boards+1):
-    table_data = parseFile(bdnum)
+# if robotScores are supplied, use that to try to differentiate between two robot pairs
+if args.robotScores is not None:
+    initRobotData()
+    for (bdnum, table_data) in travTableData:
+        for row in table_data:
+            buildRobotData(bdnum, row)
 
+    if args.debug:
+        print('----- snapshot of robotData ----')
+        print(robotData)
+
+    # use itertools to get all the combinations
+    keysets = []
+    for rndnum in range(1, int(args.boards/args.bpr) + 1):
+        keysets.append(list(robotData[rndnum].keys()))
+    if args.debug:
+        pprint(keysets)
+
+    allCombos = list(itertools.product(*keysets))
+    robScoreKeyLists = {}
+    for robscore in args.robotScores:
+        robScoreKeyLists[robscore] = []
+        
+    for keylist in allCombos:
+        # first make sure all the opponent names are unique across rounds
+        # and if so, combine all the scores for all rounds into one list so we can avg it
+        if robKeyOppNamesUnique(keylist):    
+            rndnum = 1
+            scores = []
+            for key in keylist:
+                scores.extend(robotData[rndnum][key])
+                rndnum += 1
+            avg = round(sum(scores) / len(scores), 2)
+            # pprint(scores)
+            # now see if it matches any total robotScores
+            for robscore in args.robotScores:
+                if avg == robscore:
+                    robScoreKeyLists[robscore].append(keylist)
+
+    # now check that each robscore does appear exactly once in the robScoreKeyLists
+    # Note: on success need to eventually go back thru travTableData and change GiB names
+    for robscore in args.robotScores:
+        keylistArray = robScoreKeyLists[robscore]
+        if len(keylistArray) == 0:
+            print(f'Error: no keylists combos match for robot score {robscore}')
+            sys.exit(1)
+        print('robscore=', robscore)
+        for keylist in keylistArray:
+            pprint(keylist)
+        if len(keylistArray) > 1:
+            print(f'Error: multiple keylists combos match for robot score {robscore}')
+            sys.exit(1)
+
+    sys.exit(1)
+    
+for (bdnum, table_data) in travTableData:
     # place rows in big table indexed by boardnumber and North and East names
     for row in table_data:
         addToMaps(bdnum, row)
-
-# with all files processed and in maps, go thru list of TravLine objects
+    
+# With all files processed and in maps, go thru list of TravLine objects
 # and compute WaitEndTime (for end of round tlines)
 # North and East point to same TravLine object so only need to do one.
 for bdnum in range (1, args.boards + 1):
