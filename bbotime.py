@@ -31,10 +31,11 @@ map = {}
 players = {}
 partners = {}
 opps = {}
-oppositeDir = {'North' : 'South',
+partnerDir = {'North' : 'South',
                'East' : 'West'}
 
 gibName = 'GiB'
+vsstr = ' vs. '
 robotData = {}
 
 def parse_args():
@@ -77,7 +78,7 @@ class TravLine(object):
     # this thing also handles if a robot came in as a replacement
     def nameForDirection(self, row, dir):
         name = row[dir].lower()
-        pard = row[oppositeDir[dir]].lower()
+        pard = row[partnerDir[dir]].lower()
         if name in partners.keys():
             return name
         else:
@@ -185,7 +186,7 @@ def printPersonSummary(player):
             totalPlay = totalPlay + roundMins
             totalWait = totalWait + waitMins
             roundMins = 0
-    print(f'  {totalPlay:3} + {totalWait:2}')
+    print(f'  {int(totalPlay):3} + {int(totalWait):2}')
 
     
 def parseFile(n):
@@ -246,7 +247,7 @@ def addRobotScores(bdnum, row, dir):
     # and the direction which helps if robot is playing robot
     rndnum = int((bdnum-1)/args.bpr) + 1
     oppdir = 'East' if dir == 'North' else 'North'
-    key = f'{dir} vs. {row[oppdir].lower()}'
+    key = f'{dir}{vsstr}{row[oppdir].lower()}'
     if robotData[rndnum].get(key) == None:
         robotData[rndnum][key] = []
     # add the score
@@ -259,13 +260,13 @@ def addRobotScores(bdnum, row, dir):
 def buildRobotData(bdnum, row):
     # only do this if one of the two pairs is a robot pair
     for dir in ['North', 'East']:
-        if row[dir] == gibName and row[oppositeDir[dir]] == gibName:
+        if row[dir] == gibName and row[partnerDir[dir]] == gibName:
             addRobotScores(bdnum, row, dir)
 
 def robKeyOppNamesUnique(keylist):
     oppMap = {}
     for key in keylist:
-        oppname = key.split(' vs. ')[1]
+        oppname = key.split(vsstr)[1]
         if oppMap.get(oppname) is None:
             oppMap[oppname] = 1
         else:
@@ -273,7 +274,83 @@ def robKeyOppNamesUnique(keylist):
     # if we get this far, success
     return True
 
+def getAllLegalRobotKeylists():
+    # use itertools to get all the combinations
+    keysets = []
+    for rndnum in range(1, int(args.boards/args.bpr) + 1):
+        keysets.append(list(robotData[rndnum].keys()))
+    if args.debug:
+        pprint(keysets)
 
+    allCombos = list(itertools.product(*keysets))
+    allLegalKeylists = []
+    for keylist in allCombos:
+        # first make sure all the opponent names are unique across rounds
+        # and if so, combine all the scores for all rounds into one list so we can avg it
+        if robKeyOppNamesUnique(keylist):    
+            allLegalKeylists.append(keylist)
+    return allLegalKeylists
+
+def getScoreAllBoards(keylist):
+    # for this keylist, combine all the scores for all rounds into one list so we can avg it
+    rndnum = 1
+    scores = []
+    for key in keylist:
+        scores.extend(robotData[rndnum][key])
+        rndnum += 1
+    avg = round(sum(scores) / len(scores), 2)
+    return avg
+
+def fixRobotNamesInTravs(robscore, keylist):
+    print('robscore=', robscore)
+    pprint(keylist)
+    rndnum = 1    
+    for key in keylist:
+        for bdnum in range(((rndnum-1) * args.bpr) + 1, (rndnum * args.bpr) + 1):
+            (exbdnum, table_data) = travTableData[bdnum-1]
+            assert(exbdnum == bdnum), f'{exbdnum} != {bdnum}'
+            # find the row that has robotName in expected direction
+            # and playing expected opp
+            (direction, oppname) = key.split(vsstr)
+            oppdir = 'East' if direction == 'North' else 'North'
+            rowsChanged = 0
+            if args.debug:
+                print(f'bdnum {bdnum}, {robscore}, {key}')
+            for row in table_data:
+                # todo: make this more robust if players start with the same substring
+                if row[direction].startswith(gibName) and row[oppdir].lower().startswith(oppname):
+                    row[direction] = f'{gibName}-{robscore}'
+                    parddir = partnerDir[direction]
+                    row[parddir] = f'{gibName}-{robscore}-pard'
+                    rowsChanged += 1
+                    if args.debug:
+                        print(f'after: {rowsChanged} ', end='')
+                        pprint(row)
+            assert(rowsChanged == 1)
+        rndnum += 1
+
+def checkKeylistDiffs(keylistArray, robscore):
+    if len(keylistArray) > 2:
+        return None
+    # see if only differ in one key
+    (keylist1, keylist2) = keylistArray
+    numDiffs = 0
+    for (key1, key2) in zip(keylist1, keylist2):
+        if key1 != key2:
+            numDiffs += 1
+            (dir1, opp1) = key1.split(vsstr)
+            (dir2, opp2) = key2.split(vsstr)
+            if opp1 == 'gib' and opp2 == 'gib':
+                # difference is resolvable, return one based on our position
+                # in the args.robotScores array
+                scorepos = args.robotScores.index(robscore)
+                candidate = keylistArray[scorepos]
+    if numDiffs == 1:
+        print('picked keylist which differed insignificantly')
+        return candidate
+    else:
+        return None
+        
 #-------- main stuff starts here -----------
 args = parse_args()
     
@@ -304,6 +381,11 @@ readAllTravFiles()
 
 # if robotScores are supplied, use that to try to differentiate between two robot pairs
 if args.robotScores is not None:
+    #first check that all supplied robot scores are unique, otherwise we can't deduce anything
+    if len(set(args.robotScores)) != len(args.robotScores):
+        print('Error: Robot Scores must all be unique')
+        sys.exit(1)
+      
     initRobotData()
     for (bdnum, table_data) in travTableData:
         for row in table_data:
@@ -313,50 +395,48 @@ if args.robotScores is not None:
         print('----- snapshot of robotData ----')
         print(robotData)
 
-    # use itertools to get all the combinations
-    keysets = []
-    for rndnum in range(1, int(args.boards/args.bpr) + 1):
-        keysets.append(list(robotData[rndnum].keys()))
-    if args.debug:
-        pprint(keysets)
-
-    allCombos = list(itertools.product(*keysets))
+    # this maps a robot score to a list of possible keysets
+    # ideally this maps to 1 (0 or >1 would be an error)
     robScoreKeyLists = {}
     for robscore in args.robotScores:
         robScoreKeyLists[robscore] = []
         
-    for keylist in allCombos:
-        # first make sure all the opponent names are unique across rounds
-        # and if so, combine all the scores for all rounds into one list so we can avg it
-        if robKeyOppNamesUnique(keylist):    
-            rndnum = 1
-            scores = []
-            for key in keylist:
-                scores.extend(robotData[rndnum][key])
-                rndnum += 1
-            avg = round(sum(scores) / len(scores), 2)
-            # pprint(scores)
-            # now see if it matches any total robotScores
-            for robscore in args.robotScores:
-                if avg == robscore:
-                    robScoreKeyLists[robscore].append(keylist)
+    allLegalKeylists = getAllLegalRobotKeylists()
+    for keylist in allLegalKeylists:
+        totScore = getScoreAllBoards(keylist)
+        # now see if it matches any total robotScores
+        # and put it in robScoreKeyLists if it does
+        for robscore in args.robotScores:
+            if totScore == robscore:
+                robScoreKeyLists[robscore].append(keylist)
 
     # now check that each robscore does appear exactly once in the robScoreKeyLists
     # Note: on success need to eventually go back thru travTableData and change GiB names
+    errorExit = False
     for robscore in args.robotScores:
         keylistArray = robScoreKeyLists[robscore]
         if len(keylistArray) == 0:
             print(f'Error: no keylists combos match for robot score {robscore}')
-            sys.exit(1)
-        print('robscore=', robscore)
-        for keylist in keylistArray:
-            pprint(keylist)
-        if len(keylistArray) > 1:
-            print(f'Error: multiple keylists combos match for robot score {robscore}')
-            sys.exit(1)
+            errorExit = True
+        elif len(keylistArray) > 1:
+            # see if we have a special case where we can just pick one of two
+            chosenKeylist = checkKeylistDiffs(keylistArray, robscore)
+            if chosenKeylist is not None:
+                fixRobotNamesInTravs(robscore, chosenKeylist)
+            else:
+                print(f'Error: multiple keylists combos match for robot score {robscore}')
+                for keylist in keylistArray:
+                    pprint(keylist)
+                errorExit = True
+        else:
+            # exactly one entry in the list
+            # fix up the robotnames to be unique
+            fixRobotNamesInTravs(robscore, keylistArray[0])
+    if errorExit:
+        sys.exit(1)
 
-    sys.exit(1)
-    
+# at this point the robot names are fixed up if they could be
+# so proceed as if there was no duplication of names
 for (bdnum, table_data) in travTableData:
     # place rows in big table indexed by boardnumber and North and East names
     for row in table_data:
