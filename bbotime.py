@@ -15,14 +15,14 @@
 # reques E-F to finish.  A corollary of this is that with 3 tables all
 # moves for the next round require all 3 tables to be finished.
 
-from bs4 import BeautifulSoup
 import sys
-import json
 import time
 import argparse
 import os
 import itertools
 from pprint import pprint
+
+import bboparse
 
 global args
 
@@ -189,53 +189,6 @@ def printPersonSummary(player):
     print(f'  {int(totalPlay):3} + {int(totalWait):2}')
 
     
-def parseFile(n):
-    # two different naming options supported
-    fname1 = f'{args.dir}/hands ({n}).html'
-    fname2 = f'{args.dir}/T{n}.html'
-    fname = fname1 if os.path.isfile(fname1) else fname2
-    file = open(fname)
-    html_doc = file.read()
-
-    if args.debug:
-        print(f'---- Handling Traveller File {fname} for Board {n} ----')
-        
-
-    soup = BeautifulSoup(html_doc, 'html.parser')
-
-    # print(soup.prettify())
-    # print(soup.find_all('a')[1]['href'])
-
-
-    fields = []
-    table_data = []
-    rows = soup.table.find_all('tr')
-    # get rid of rows[0]
-    r0 = rows.pop(0)
-    if False:
-        print(r0)
-        print('--------- Rest of Rows -----------')
-        print(rows)
-
-    for tr in rows:
-        for th in tr.find_all('th', recursive=True):
-            thtxt = 'N' if th.text == 'N\u00ba' else th.text
-            fields.append(thtxt)
-    for tr in rows:
-        datum = {}
-        for i, td in enumerate(tr.find_all('td', recursive=True)):
-            datum[fields[i]] = td.text
-        if datum:
-            table_data.append(datum)
-
-    # print(json.dumps(table_data, indent=4))
-    return table_data
-
-# builds list of tuples of bdnum and table_data (array of trav rows for that bdnum)
-def readAllTravFiles():
-    for bdnum in range(1, args.boards+1):
-        table_data = parseFile(bdnum)
-        travTableData.append((bdnum, table_data))
 
 def initRobotData():
     for rndnum in range(1, int(args.boards/args.bpr) + 1):
@@ -377,7 +330,7 @@ if False:
 
 initMap()
 #read all traveler files into travTableData
-readAllTravFiles()
+travTableData = bboparse.readAllTravFiles(args)
 
 # if robotScores are supplied, use that to try to differentiate between two robot pairs
 if args.robotScores is not None:
