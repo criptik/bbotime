@@ -31,12 +31,6 @@ map = {}
 players = {}
 partners = {}
 opps = {}
-partnerDir = {'North' : 'South',
-               'East' : 'West'}
-
-gibName = 'GiB'
-vsstr = ' vs. '
-robotData = {}
 
 def parse_args():
     parser = argparse.ArgumentParser(description='BBO Tourney Time Analysis')
@@ -53,37 +47,10 @@ def parse_args():
     return parser.parse_args()
 
 
-def readTime(str):
-    return time.mktime(time.strptime(str, '%Y-%m-%d %H:%M'))
-
-class TravLine(object):
-    def __init__(self, bdnum, row):
-        self.bdnum = bdnum
-        # record partners if first board
-        if bdnum == 1:
-            n = row['North'].lower()
-            s = row['South'].lower()
-            e = row['East'].lower()
-            w = row['West'].lower()
-            partners[n] = s
-            partners[s] = n
-            partners[e] = w
-            partners[w] = e
-        self.iEndTime = readTime(row['Time'])
-        self.north = self.nameForDirection(row, 'North')
-        self.east = self.nameForDirection(row, 'East')
+class BboTimeTravLine(bboparse.BboTravLineBase):
+    def __init__(self, args, bdnum, row):
+        super(BboTimeTravLine, self).__init__(args, bdnum, row)
         self.waitEndTime = self.iEndTime  # for end of round records this will be adjusted later
-        self.htmlRow = row   # save in case needed later
-
-    # this thing also handles if a robot came in as a replacement
-    def nameForDirection(self, row, dir):
-        name = row[dir].lower()
-        pard = row[partnerDir[dir]].lower()
-        if name in partners.keys():
-            return name
-        else:
-            # this will return the original partner in this pair
-            return partners[pard]
 
     # for end of round tlines, compute dependenciesx
     def computeWaitEndTime(self, clockedAlg=False):
@@ -94,9 +61,9 @@ class TravLine(object):
                 deps[player] = 1
         else:
             # normal unclocked logic, compute dependencies
-            deps[self.north] = 1
+            deps[self.origNorth] = 1
             # find our opp for next round and add that to the deps list
-            nextRoundOpp = opps[self.bdnum+1][self.north]
+            nextRoundOpp = opps[self.bdnum+1][self.origNorth]
             deps[nextRoundOpp] = 1
             # in the normal algorithm a pair cannot advance unless it current opps can also advance
             anotherPass = True
@@ -122,9 +89,9 @@ class TravLine(object):
     # addStartTime just uses prev round's end time, + any wait time for first boards in round
     def addStartTime(self):
         if self.bdnum == 1:
-            self.iStartTime = readTime(args.tstart)
+            self.iStartTime = self.readTime(args.tstart)
         else:
-            prevTravNorth = map[self.bdnum-1][self.north]
+            prevTravNorth = map[self.bdnum-1][self.origNorth]
             self.iStartTime = prevTravNorth.waitEndTime
 
     def waitMins(self):
@@ -137,7 +104,7 @@ class TravLine(object):
         return (self.iEndTime - self.iStartTime)/60
         
     def __str__(self):
-        mystr = ('N:%15s, E:%15s, Start:%5s, End:%5s, Elapsed:%2d, Wait:%2d' % (self.north, self.east,
+        mystr = ('N:%15s, E:%15s, Start:%5s, End:%5s, Elapsed:%2d, Wait:%2d' % (self.origNorth, self.origEast,
                                                                                 self.showtime(self.iStartTime),
                                                                                 self.showtime(self.iEndTime),
                                                                                 self.iElapsed, self.waitMins() ))
@@ -150,13 +117,13 @@ def initMap():
         
         
 def addToMaps(bdnum, row):
-    tline = TravLine(bdnum, row)
-    map[bdnum][tline.north] = tline
-    map[bdnum][tline.east] = tline
-    players[tline.north] = 1
-    players[tline.east] = 1
-    opps[bdnum][tline.north] = tline.east
-    opps[bdnum][tline.east] = tline.north
+    tline = BboTimeTravLine(args, bdnum, row)
+    map[bdnum][tline.origNorth] = tline
+    map[bdnum][tline.origEast] = tline
+    players[tline.origNorth] = 1
+    players[tline.origEast] = 1
+    opps[bdnum][tline.origNorth] = tline.origEast
+    opps[bdnum][tline.origEast] = tline.origNorth
     
 
 def printMap():
@@ -189,120 +156,6 @@ def printPersonSummary(player):
     print(f'  {int(totalPlay):3} + {int(totalWait):2}')
 
     
-
-def initRobotData():
-    for rndnum in range(1, int(args.boards/args.bpr) + 1):
-        robotData[rndnum] = {}
-        
-                     
-def addRobotScores(bdnum, row, dir):
-    # robotData will be keyed by roundnum and oppName
-    # and the direction which helps if robot is playing robot
-    rndnum = int((bdnum-1)/args.bpr) + 1
-    oppdir = 'East' if dir == 'North' else 'North'
-    key = f'{dir}{vsstr}{row[oppdir].lower()}'
-    if robotData[rndnum].get(key) == None:
-        robotData[rndnum][key] = []
-    # add the score
-    fscore = float(row['Score'][:-1])  # strip % sign off end
-    if dir == 'East':
-        fscore = 100.0 - fscore
-    robotData[rndnum][key].append(fscore)
-    # print(bdnum, dir, robotData)
-    
-def buildRobotData(bdnum, row):
-    # only do this if one of the two pairs is a robot pair
-    for dir in ['North', 'East']:
-        if row[dir] == gibName and row[partnerDir[dir]] == gibName:
-            addRobotScores(bdnum, row, dir)
-
-def robKeyOppNamesUnique(keylist):
-    oppMap = {}
-    for key in keylist:
-        oppname = key.split(vsstr)[1]
-        if oppMap.get(oppname) is None:
-            oppMap[oppname] = 1
-        else:
-            return False
-    # if we get this far, success
-    return True
-
-def getAllLegalRobotKeylists():
-    # use itertools to get all the combinations
-    keysets = []
-    for rndnum in range(1, int(args.boards/args.bpr) + 1):
-        keysets.append(list(robotData[rndnum].keys()))
-    if args.debug:
-        pprint(keysets)
-
-    allCombos = list(itertools.product(*keysets))
-    allLegalKeylists = []
-    for keylist in allCombos:
-        # first make sure all the opponent names are unique across rounds
-        # and if so, combine all the scores for all rounds into one list so we can avg it
-        if robKeyOppNamesUnique(keylist):    
-            allLegalKeylists.append(keylist)
-    return allLegalKeylists
-
-def getScoreAllBoards(keylist):
-    # for this keylist, combine all the scores for all rounds into one list so we can avg it
-    rndnum = 1
-    scores = []
-    for key in keylist:
-        scores.extend(robotData[rndnum][key])
-        rndnum += 1
-    avg = round(sum(scores) / len(scores), 2)
-    return avg
-
-def fixRobotNamesInTravs(robscore, keylist):
-    print('robscore=', robscore)
-    pprint(keylist)
-    rndnum = 1    
-    for key in keylist:
-        for bdnum in range(((rndnum-1) * args.bpr) + 1, (rndnum * args.bpr) + 1):
-            (exbdnum, table_data) = travTableData[bdnum-1]
-            assert(exbdnum == bdnum), f'{exbdnum} != {bdnum}'
-            # find the row that has robotName in expected direction
-            # and playing expected opp
-            (direction, oppname) = key.split(vsstr)
-            oppdir = 'East' if direction == 'North' else 'North'
-            rowsChanged = 0
-            if args.debug:
-                print(f'bdnum {bdnum}, {robscore}, {key}')
-            for row in table_data:
-                # todo: make this more robust if players start with the same substring
-                if row[direction].startswith(gibName) and row[oppdir].lower().startswith(oppname):
-                    row[direction] = f'{gibName}-{robscore}'
-                    parddir = partnerDir[direction]
-                    row[parddir] = f'{gibName}-{robscore}-pard'
-                    rowsChanged += 1
-                    if args.debug:
-                        print(f'after: {rowsChanged} ', end='')
-                        pprint(row)
-            assert(rowsChanged == 1)
-        rndnum += 1
-
-def checkKeylistDiffs(keylistArray, robscore):
-    if len(keylistArray) > 2:
-        return None
-    # see if only differ in one key
-    (keylist1, keylist2) = keylistArray
-    numDiffs = 0
-    for (key1, key2) in zip(keylist1, keylist2):
-        if key1 != key2:
-            numDiffs += 1
-            (dir1, opp1) = key1.split(vsstr)
-            (dir2, opp2) = key2.split(vsstr)
-            if opp1 == 'gib' and opp2 == 'gib':
-                # difference is resolvable, return one based on our position
-                # in the args.robotScores array
-                scorepos = args.robotScores.index(robscore)
-                candidate = keylistArray[scorepos]
-    if numDiffs == 1:
-        print('picked keylist which differed insignificantly')
-        return candidate
-    else:
-        return None
         
 #-------- main stuff starts here -----------
 args = parse_args()
@@ -330,87 +183,31 @@ if False:
 
 initMap()
 #read all traveler files into travTableData
-travTableData = bboparse.readAllTravFiles(args)
-
-# if robotScores are supplied, use that to try to differentiate between two robot pairs
-if args.robotScores is not None:
-    #first check that all supplied robot scores are unique, otherwise we can't deduce anything
-    if len(set(args.robotScores)) != len(args.robotScores):
-        print('Error: Robot Scores must all be unique')
-        sys.exit(1)
-      
-    initRobotData()
-    for (bdnum, table_data) in travTableData:
-        for row in table_data:
-            buildRobotData(bdnum, row)
-
-    if args.debug:
-        print('----- snapshot of robotData ----')
-        print(robotData)
-
-    # this maps a robot score to a list of possible keysets
-    # ideally this maps to 1 (0 or >1 would be an error)
-    robScoreKeyLists = {}
-    for robscore in args.robotScores:
-        robScoreKeyLists[robscore] = []
-        
-    allLegalKeylists = getAllLegalRobotKeylists()
-    for keylist in allLegalKeylists:
-        totScore = getScoreAllBoards(keylist)
-        # now see if it matches any total robotScores
-        # and put it in robScoreKeyLists if it does
-        for robscore in args.robotScores:
-            if totScore == robscore:
-                robScoreKeyLists[robscore].append(keylist)
-
-    # now check that each robscore does appear exactly once in the robScoreKeyLists
-    # Note: on success need to eventually go back thru travTableData and change GiB names
-    errorExit = False
-    for robscore in args.robotScores:
-        keylistArray = robScoreKeyLists[robscore]
-        if len(keylistArray) == 0:
-            print(f'Error: no keylists combos match for robot score {robscore}')
-            errorExit = True
-        elif len(keylistArray) > 1:
-            # see if we have a special case where we can just pick one of two
-            chosenKeylist = checkKeylistDiffs(keylistArray, robscore)
-            if chosenKeylist is not None:
-                fixRobotNamesInTravs(robscore, chosenKeylist)
-            else:
-                print(f'Error: multiple keylists combos match for robot score {robscore}')
-                for keylist in keylistArray:
-                    pprint(keylist)
-                errorExit = True
-        else:
-            # exactly one entry in the list
-            # fix up the robotnames to be unique
-            fixRobotNamesInTravs(robscore, keylistArray[0])
-    if errorExit:
-        sys.exit(1)
+travTableData = bboparse.BboParserBase(args).readAllTravFiles()
 
 # at this point the robot names are fixed up if they could be
 # so proceed as if there was no duplication of names
-for (bdnum, table_data) in travTableData:
+for bdnum in range (1, args.boards + 1):
     # place rows in big table indexed by boardnumber and North and East names
-    for row in table_data:
+    for row in travTableData[bdnum]:
         addToMaps(bdnum, row)
     
-# With all files processed and in maps, go thru list of TravLine objects
+# With all files processed and in maps, go thru list of BboTimeTravLine objects
 # and compute WaitEndTime (for end of round tlines)
-# North and East point to same TravLine object so only need to do one.
+# North and East point to same BboTimeTravLine object so only need to do one.
 for bdnum in range (1, args.boards + 1):
     # note only needed for end of round records and don't need last one
     if bdnum % args.bpr == 0 and bdnum != args.boards:
         for player in map[bdnum].keys():
             tline = map[bdnum][player]
-            if player == tline.north:
+            if player == tline.origNorth:
                 tline.computeWaitEndTime()
 
 # now startTimes
 for bdnum in range (1, args.boards + 1):
     for player in map[bdnum].keys():
         tline = map[bdnum][player]
-        if player == tline.north:
+        if player == tline.origNorth:
             tline.addStartTime()
             tline.iElapsed = tline.elapsed()
             
@@ -448,7 +245,7 @@ if args.simclocked:
         if bdnum % args.bpr == 0:
             for player in map[bdnum].keys(): 
                 tline = map[bdnum][player]
-                if player == tline.north:            
+                if player == tline.origNorth:            
                     tline.computeWaitEndTime(clockedAlg=True)
 
         if bdnum == 6 and args.debug:
