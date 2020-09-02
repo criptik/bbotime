@@ -17,12 +17,10 @@
 
 import sys
 import time
-import argparse
 import os
-import itertools
 from pprint import pprint
 
-import bboparse
+from bboparse import BboParserBase, BboTravLineBase
 
 global args
 
@@ -32,22 +30,15 @@ players = {}
 partners = {}
 opps = {}
 
-def parse_args():
-    parser = argparse.ArgumentParser(description='BBO Tourney Time Analysis')
-    # note: we could detect boards per round from the data but support args overrides in case
-    # but we do have some built-in defaults for common board counts
-    parser.add_argument('--boards', type=int, default=None, help='total number of boards')
-    parser.add_argument('--bpr', type=int, default=None, help='boards per round')
-    parser.add_argument('--tstart',  default=None, help='tournament start date/time')
-    parser.add_argument('--dir',  help='directory containing traveler html records')
-    parser.add_argument('--simclocked', default=False, action='store_true', help='afterwards simulate as if clocked had been used')
+class BboTimeParser(BboParserBase):
+    def appDescription(self):
+        return 'BBO Tourney Time Analysis'
 
-    parser.add_argument('--robotScores', type=float, nargs='*', default=None, help='supply robot scores to help differentiate between robots which all have the same name') 
-    parser.add_argument('--debug', default=False, action='store_true', help='print some debug info') 
-    return parser.parse_args()
+    def addParserArgs(self, parser):
+        parser.add_argument('--tstart',  default=None, help='tournament start date/time')
+        parser.add_argument('--simclocked', default=False, action='store_true', help='afterwards simulate as if clocked had been used')
 
-
-class BboTimeTravLine(bboparse.BboTravLineBase):
+class BboTimeTravLine(BboTravLineBase):
     def __init__(self, args, bdnum, row):
         super(BboTimeTravLine, self).__init__(args, bdnum, row)
         self.waitEndTime = self.iEndTime  # for end of round records this will be adjusted later
@@ -158,19 +149,9 @@ def printPersonSummary(player):
     
         
 #-------- main stuff starts here -----------
-args = parse_args()
+myBboParser = BboTimeParser()
+args = myBboParser.parseArguments()
     
-# with no explicit boards count, count files in directory
-if args.boards is None:
-    args.boards = len([name for name in os.listdir(args.dir) if os.path.isfile(os.path.join(args.dir, name))])
-
-# detect defaults for bpr
-if args.bpr is None:
-    if args.boards == 20:
-        args.bpr = 4
-    elif args.boards == 21:
-        args.bpr = 3
-
 # build default start time from directory name (if start time not supplied in args)
 if args.tstart is None:
     head, sep, tail = args.dir.partition('-')
@@ -183,7 +164,7 @@ if False:
 
 initMap()
 #read all traveler files into travTableData
-travTableData = bboparse.BboParserBase(args).readAllTravFiles()
+travTableData = myBboParser.readAllTravFiles()
 
 # at this point the robot names are fixed up if they could be
 # so proceed as if there was no duplication of names

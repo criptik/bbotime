@@ -3,15 +3,16 @@ import json
 import os
 import re
 import time
+import argparse
+
 from pprint import pprint
 import sys
 from bborobotfix import BboRobotFixer
 
 class BboParserBase(object):
 
-    def __init__(self, args):
-        self.args = args
-    
+    def __init__(self):
+        pass
 
     # this routine reads the html file for one traveller and uses BeautifulSoup
     # to return an array of rows, each a dict for a single row of the html file
@@ -82,6 +83,42 @@ class BboParserBase(object):
     def createObject(self, bdnum, row):
         return BboTravLineBase(self.args, bdnum, row)
 
+    def appDescription(self):
+        return 'BBO Parser Base'
+    
+    def parseArguments(self):
+        parser = argparse.ArgumentParser(self.appDescription())
+        # note: we could detect boards per round from the data but support args overrides in case
+        # but we do have some built-in defaults for common board counts
+        parser.add_argument('--boards', type=int, default=None, help='total number of boards')
+        parser.add_argument('--bpr', type=int, default=None, help='boards per round')
+        parser.add_argument('--dir',  help='directory containing traveler html records')
+        parser.add_argument('--robotScores', type=float, nargs='*', default=None, help='supply robot scores to help differentiate between robots which all have the same name') 
+        parser.add_argument('--debug', default=False, action='store_true', help='print some debug info') 
+
+        # allow child to add args
+        self.addParserArgs(parser)
+        
+        args = parser.parse_args()
+        # handle some common fixups
+        # with no explicit boards count, count files in directory
+        if args.boards is None:
+            args.boards = len([name for name in os.listdir(args.dir) if os.path.isfile(os.path.join(args.dir, name))])
+
+        # detect defaults for bpr
+        if args.bpr is None:
+            if args.boards == 20:
+                args.bpr = 4
+            elif args.boards == 21:
+                args.bpr = 3
+
+        self.args = args
+        return args
+
+    # allow child to add its own args
+    def addParserArgs(self, parser):
+        pass
+        
                                     
 partnerDir = {'North' : 'South',
                'East' : 'West'}
