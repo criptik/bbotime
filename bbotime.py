@@ -39,8 +39,8 @@ class BboTimeParser(BboParserBase):
         parser.add_argument('--simclocked', default=False, action='store_true', help='afterwards simulate as if clocked had been used')
 
 class BboTimeTravLine(BboTravLineBase):
-    def __init__(self, args, bdnum, row):
-        super(BboTimeTravLine, self).__init__(args, bdnum, row)
+    def __init__(self, bdnum, row):
+        super(BboTimeTravLine, self).__init__(bdnum, row)
         self.waitEndTime = self.iEndTime  # for end of round records this will be adjusted later
 
     # for end of round tlines, compute dependenciesx
@@ -108,7 +108,7 @@ def initMap():
         
         
 def addToMaps(bdnum, row):
-    tline = BboTimeTravLine(args, bdnum, row)
+    tline = BboTimeTravLine(bdnum, row)
     map[bdnum][tline.origNorth] = tline
     map[bdnum][tline.origEast] = tline
     players[tline.origNorth] = 1
@@ -168,6 +168,7 @@ travTableData = myBboParser.readAllTravFiles()
 
 # at this point the robot names are fixed up if they could be
 # so proceed as if there was no duplication of names
+BboTimeTravLine.importArgs(args)
 for bdnum in range (1, args.boards + 1):
     # place rows in big table indexed by boardnumber and North and East names
     for row in travTableData[bdnum]:

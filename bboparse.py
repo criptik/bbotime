@@ -124,9 +124,12 @@ partnerDir = {'North' : 'South',
                'East' : 'West'}
 
 class BboTravLineBase(object):
+    @classmethod
+    def importArgs(cls, args):
+        cls.args = args
+
     origPartners = {}   # class variable
-    def __init__(self, args, bdnum, row):
-        self.args = args
+    def __init__(self, bdnum, row):
         self.bdnum = bdnum
         self.north = n = row['North'].lower()
         self.south = s = row['South'].lower()
@@ -147,7 +150,7 @@ class BboTravLineBase(object):
         # parse different parts of result
         resstr = row['Result']
         resstr = re.sub(r'\<.*?\>', '', resstr)
-        if args.debug:
+        if self.args.debug:
             print(resstr, len(resstr))
         if resstr.startswith('PASS') or resstr.startswith('A'):
             # special case for passed out or averages
