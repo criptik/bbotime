@@ -45,13 +45,18 @@ class BboParserBase(object):
             print(rows)
 
         for tr in rows:
+            #build fields array
             for th in tr.find_all('th', recursive=True):
-                thtxt = 'N' if th.text == 'N\u00ba' else th.text
-                fields.append(thtxt)
+                fields.append(th.text)
         for tr in rows:
             datum = {}
             for i, td in enumerate(tr.find_all('td', recursive=True)):
-                datum[fields[i]] = td.text
+                # skip some useless fields
+                if fields[i] not in ['N\u00ba', 'Movie']:
+                    datum[fields[i]] = td.text
+                #special case for Movie element (lin info encoded in onclick)
+                if fields[i] == 'Movie':
+                    datum['LinStr'] = td.find('a').attrs['onclick']
             if datum:
                 table_data.append(datum)
 
