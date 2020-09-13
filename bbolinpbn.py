@@ -81,7 +81,7 @@ class Deal(object):
 
 
     def toPbnString(self):
-        result = 'S:'
+        result = 'S:'  # BBO deals always start with 'S'
         for (i, hand) in enumerate(self.hands):
             if i != 0:
                 result = result + ' '
@@ -92,6 +92,7 @@ class Deal(object):
 for str in testStrings:
     str = re.sub('%7C', '|', str)
     str = re.sub('%2C', ' ', str)
+    print(str)
     str = re.sub('^.*md\|\d', '', str)
     str = re.sub('\|rh\|.*$', '', str)
     str = re.sub('S', ' ', str)
@@ -107,11 +108,6 @@ for str in testStrings:
 
     mydeal = Deal(hands)
     
-    # now build missing hand
-    if False:
-        for hand in hands:
-            print(hand)
-
     pbnResult = Deal(hands).toPbnString()
     print('dealpbn= ', pbnResult)
 
@@ -155,6 +151,6 @@ for str in testStrings:
 }
     for bdnum in range(1,5):
         print(f'bdnum = {bdnum}')
-        (dlr, vul) = dlrVulMap[bdnum]
+        (dlr, vul) = dlrVulMap[(bdnum % 16) + 1]
         res = dds.DealerPar(ctypes.pointer(tableRes.results[0]), ctypes.pointer(pres2), dlr, vul)
         functions.PrintDealerPar(ctypes.pointer(pres2))    

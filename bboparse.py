@@ -152,7 +152,7 @@ class BboTravLineBase(object):
         self.nsPoints = row['NS Points']
         self.nsScore  = float(row['Score'].rstrip('%'))
         self.iEndTime = self.readTime(row['Time'])
-        # self.movieStr = row['Movie']
+        self.linStr = row['LinStr']
         # parse different parts of result
         resstr = row['Result']
         resstr = re.sub(r'\<.*?\>', '', resstr)
