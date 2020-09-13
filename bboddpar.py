@@ -88,7 +88,7 @@ class BboDDParTravLine(BboTravLineBase):
             # other fields left for later computation
             self.ddTable = None
             self.parResults = None
-
+            
         def getDDTable(self):
             if self.ddTable is None:
                 print(f'...computing DD Table for bdnum {bdnum}')
@@ -120,7 +120,7 @@ class BboDDParTravLine(BboTravLineBase):
                 handStr = re.sub('C ', '\N{BLACK CLUB SUIT} ', handStr)
                 print(handStr)
 
-        def getTableEntry(self, suit, dir):
+        def getDDTricks(self, suit, dir):
             suitidx = 'SHDCNT'.index(suit)
             diridx = 'NESW'.index(dir)
             table = ctypes.pointer(self.ddTable.results[0])
@@ -128,12 +128,14 @@ class BboDDParTravLine(BboTravLineBase):
             
         def printTable(self):
             self.getDDTable()
-            print('Table\n-------')
-            print("{:5} {:<5} {:<5} {:<5} {:<5}".format("", "North", "South", "East", "West"))
+            print('DD Table\n-------')
+            print("{:5} {:>5} {:>5} {:>5} {:>5}".format("", "North", "South", "East", "West"))
             for suitstr in ['NT', 'S', 'H', 'D', 'C']:
                 print(f'{suitstr:>5}', end='')
                 for dir in 'NSEW':
-                    print(f'{self.getTableEntry(suitstr, dir) : 6}', end='')
+                    numTricks = self.getDDTricks(suitstr, dir)
+                    trickStr = '--' if numTricks <= 6 else f'{numTricks - 6}'
+                    print(f'{trickStr : >6}', end='')
                 print()
             print()
             
@@ -141,7 +143,25 @@ class BboDDParTravLine(BboTravLineBase):
             self.getDDTable()
             print('Table Classic\n-------')
             functions.PrintTable(ctypes.pointer(self.ddTable.results[0]))
+
+        def getPar(self):
+            self.getDDTable()
+            if self.parResults is None:
+                self.computePar()
+
+        def computePar(self):
+            self.getDDTable()
+            self.parResults = dds.parResultsDealer()
+            dlr = (self.bdnum-1) % 4
+            vul = [0,2,3,1,2,3,1,0,3,1,0,2,1,0,2,3][(self.bdnum-1) % 16]
+            res = dds.DealerPar(ctypes.pointer(self.ddTable.results[0]), ctypes.pointer(self.parResults), dlr, vul)
+            return self.parResults
         
+        def printPar(self):
+            print(f'Par for board {bdnum}')
+            self.computePar()
+            functions.PrintDealerPar(ctypes.pointer(self.parResults))    
+            
     # inner class Deal
     class Deal(object):
         # a set of 4 hands
@@ -232,6 +252,7 @@ for bdnum in range (1, args.boards + 1):
 for bdnum in range (1, args.boards + 1):
     print(f'{bdnum:2}: {BboDDParTravLine.dealInfos[bdnum].pbnDealString}')
     BboDDParTravLine.dealInfos[bdnum].printHand()
-    BboDDParTravLine.dealInfos[bdnum].printTableClassic()
+    # BboDDParTravLine.dealInfos[bdnum].printTableClassic()
     BboDDParTravLine.dealInfos[bdnum].printTable()
+    BboDDParTravLine.dealInfos[bdnum].printPar()
     
