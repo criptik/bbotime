@@ -140,6 +140,7 @@ class BboTravLineBase(object):
         self.south = s = row['South'].lower()
         self.east  = e = row['East'].lower()
         self.west  = w = row['West'].lower()
+        self.playerDir = [self.north, self.east, self.south, self.west]
         if bdnum == 1:
             # record original partners in case a substitution happens later
             self.origPartners[n] = s
@@ -149,7 +150,10 @@ class BboTravLineBase(object):
         self.origNorth = self.origNameForDirection(row, 'North')
         self.origEast = self.origNameForDirection(row, 'East')
 
-        self.nsPoints = row['NS Points']
+        try:
+            self.nsPoints = int(row['NS Points'])
+        except:
+            self.nsPoints = None
         self.nsScore  = float(row['Score'].rstrip('%'))
         self.iEndTime = self.readTime(row['Time'])
         self.linStr = row['LinStr']
@@ -201,3 +205,25 @@ class BboTravLineBase(object):
     # convert time string in traveller to an integer num of secs
     def readTime(self, str):
         return time.mktime(time.strptime(str, '%Y-%m-%d %H:%M'))
+
+class Bucket(object):
+    def __init__(self):
+        self.ary = []
+
+    def count(self):
+        return len(self.ary)
+    
+    def avg(self):
+        return round(sum(self.ary) / self.count(), 2)
+        
+    def show(self, displayName, showCount = True):
+        countStr = f'({self.count()})' if showCount else ''
+        print(f'{displayName:<35} {self.avg():5.2f}% {countStr}')
+
+    def add(self, score):
+        self.ary.append(score)            
+
+    def showCountOnly(self, displayName):
+        print(f'{displayName:<35} {self.count()}')
+
+

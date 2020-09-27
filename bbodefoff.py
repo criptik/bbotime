@@ -8,7 +8,7 @@ import os
 import collections
 from pprint import pprint
 
-from bboparse import BboParserBase, BboTravLineBase
+from bboparse import BboParserBase, BboTravLineBase, Bucket
 
 global args
 
@@ -28,7 +28,7 @@ class BboDefOffParser(BboParserBase):
 class BboDefOffTravLine(BboTravLineBase):
     def __init__(self, bdnum, row):
         super(BboDefOffTravLine, self).__init__(bdnum, row)
-        self.playerDir = [self.north, self.east, self.south, self.west]
+        # nothing added here
 
 
 def nested_dict():
@@ -36,24 +36,6 @@ def nested_dict():
 
 bucketTable = nested_dict()
 vsOppTable = nested_dict()
-
-class Bucket(object):
-    def __init__(self):
-        self.ary = []
-
-    def count(self):
-        return len(self.ary)
-    
-    def avg(self):
-        return round(sum(self.ary) / self.count(), 2)
-        
-    def show(self, displayName, showCount = True):
-        countStr = f'({self.count()})' if showCount else ''
-        print(f'{displayName:<35} {self.avg():5.2f}% {countStr}')
-
-    def add(self, score):
-        self.ary.append(score)            
-
 
 # sorting key routines
 # def vsScore(bucketName):
