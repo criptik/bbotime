@@ -198,8 +198,10 @@ def getHandString(title, remainCards):
             c = c + 1
 
     # build String
-    s = f"{title}\n"
-    s += '-' * len(title) + '\n'
+    s = ''
+    if title is not None:
+        s += f"{title}\n"
+        s += '-' * len(title) + '\n'
     for i in range(DDS_HAND_LINES):
         s += text[i].decode("utf-8") + '\n'
     s += '\n'

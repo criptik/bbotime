@@ -8,6 +8,7 @@ import os
 import collections
 from pprint import pprint
 import re
+import tabulate
 sys.path.append('./python-dds/examples')
 
 import dds
@@ -84,7 +85,8 @@ class BboDDParTravLine(BboTravLineBase):
                 'D' : '\N{WHITE DIAMOND SUIT}',
                 'C' : '\N{BLACK CLUB SUIT}',
             }
-        Testing = True
+        Testing = False
+        useSuitSym = True
         
         def __init__(self, bdnum, pbnDealString):
             self.bdnum = bdnum
@@ -121,11 +123,14 @@ class BboDDParTravLine(BboTravLineBase):
 
         def printHand(self):
             if False:
-                functions.PrintPBNHand(f'Board {self.bdnum}', self.DDdealsPBN.deals[0].cards)
+                functions.PrintPBNHand(f'Board: {self.bdnum}', self.DDdealsPBN.deals[0].cards)
             else:
-                handStr = functions.getHandStringPBN(f'Board {self.bdnum}', self.DDdealsPBN.deals[0].cards)
+                title = f'Board:{self.bdnum}    Vul:{self.getVulStr()}   Dlr:{self.getDealerStr()}'
+                # call helper function with no title
+                handStr = functions.getHandStringPBN(None, self.DDdealsPBN.deals[0].cards)
                 for suit in self.SuitSyms.keys():
                     handStr = re.sub(f'{suit} ', f'{self.SuitSyms[suit]} ', handStr)
+                print(title)
                 print(handStr)
 
         def getDDTricks(self, suit, dir):
@@ -137,30 +142,56 @@ class BboDDParTravLine(BboTravLineBase):
             return table.contents.resTable[suitidx][diridx]
             
         def printTable(self):
-            # self.getDDTable()
-            print(f'DD Table for Board {self.bdnum}:\n---------------------')
-            print(f'    ', end='')
+            if not self.Testing:
+                self.getDDTable()
+            # print(f'DD Table:\n---------')
+            # create list of lists for tabulate
             suits = ['C', 'D', 'H', 'S', 'NT']
-            for suit in suits:
-                if True and suit != 'NT':
-                    print(f'{self.SuitSyms[suit]:>4}', end='')
-                else:
-                    print(f'{suit:>4}', end='')
-            print()
-            for dir in 'NSEW':
-                print(f'{dir:>4}', end='')
-                for suit in suits:
+            dirs = ['N', 'S', 'E', 'W']
+            rows = 1 + len(dirs)
+            cols = 3 + len(suits)
+            tabList = [['' for i in range(cols)] for j in range(rows)]             
+            # first is header row of suit names
+            for (sidx, suit) in enumerate(suits):
+                tabList[0][1 + sidx] = self.SuitSyms[suit] if self.useSuitSym and suit != 'NT' else suit
+            # then one row for each direction
+            for (didx, dir) in enumerate(dirs):
+                tabList[1+didx][0] = dir
+                for (sidx, suit) in enumerate(suits):
                     numTricks = self.getDDTricks(suit, dir)
-                    trickStr = '--' if numTricks <= 6 else f'{numTricks - 6}'
-                    print(f'{trickStr : >4}', end='')
-                print()
-            print()
+                    trickStr = '-' if numTricks <= 6 else f'{numTricks - 6}'
+                    tabList[1+didx][1+sidx] = trickStr
+            # add some par info at far right
+            for r in range(rows):
+                tabList[r][cols-2] = ' ' * 12
+            tabList[0][cols-1] = 'Par:'
+            if not self.Testing:
+                tabList[1][cols-1] = self.parString()
+            print(tabulate.tabulate(tabList, tablefmt='plain'), end='\n\n')
             
         def printTableClassic(self):
             self.getDDTable()
             print('Table Classic\n-------')
             functions.PrintTable(ctypes.pointer(self.ddTable.results[0]))
 
+        def getDealerIndex(self):
+            return (self.bdnum-1) % 4
+            
+        def getDealerStr(self):
+            return 'NEWS'[self.getDealerIndex()]
+            
+        def getVulIndex(self):
+            return [0,2,3,1,2,3,1,0,3,1,0,2,1,0,2,3][(self.bdnum-1) % 16]
+        
+        def getVulStr(self):
+            strmap = {
+                0 : 'None',
+                1 : 'Both',
+                2 : 'N/S',
+                3 : 'E/W',
+            }
+            return strmap[self.getVulIndex()]
+        
         def getPar(self):
             self.getDDTable()
             if self.parResults is None:
@@ -169,19 +200,21 @@ class BboDDParTravLine(BboTravLineBase):
         def computePar(self):
             self.getDDTable()
             self.parResults = dds.parResultsDealer()
-            dlr = (self.bdnum-1) % 4
-            vul = [0,2,3,1,2,3,1,0,3,1,0,2,1,0,2,3][(self.bdnum-1) % 16]
-            res = dds.DealerPar(ctypes.pointer(self.ddTable.results[0]), ctypes.pointer(self.parResults), dlr, vul)
+            res = dds.DealerPar(ctypes.pointer(self.ddTable.results[0]), ctypes.pointer(self.parResults), self.getDealerIndex(), self.getVulIndex())
             return self.parResults
         
         def printPar(self):
             print(f'Par for board {bdnum}: ', end='')
+            print(self.parString())
+            print('\n')
+
+        def parString(self):
             self.computePar()
             pcontents = ctypes.pointer(self.parResults).contents
-            print(f'NS {pcontents.score:+}', end='')
+            txt = f'NS {pcontents.score:+}'
             for i in range(pcontents.number):
-                print(f', {pcontents.contracts[i].value.decode("utf-8")}', end='')
-            print()
+                txt += f', {pcontents.contracts[i].value.decode("utf-8")}'
+            return txt
             
         def printParClassic(self):
             print(f'Par for board {bdnum}')
@@ -271,7 +304,7 @@ travTableData = []
 travTableData = myBboParser.readAllTravFiles()
 BboDDParTravLine.importArgs(args)
 travellers = {}
-if False:
+if BboDDParTravLine.DealInfo.Testing:
     #temporary for testing
     args.boards = 1 
 
@@ -281,7 +314,7 @@ for bdnum in range (1, args.boards + 1):
         tline = BboDDParTravLine(bdnum, row)
         # tline.getDDTable()
         travellers[bdnum].append(tline)
-print('travTableData and travellers are set up')
+# print('travTableData and travellers are set up')
 
 if False:
     # pprint(travellers)
@@ -334,8 +367,5 @@ if True:
     for bdnum in range (1, args.boards + 1):
         # print(f'{bdnum:2}: {BboDDParTravLine.dealInfos[bdnum].pbnDealString}')
         BboDDParTravLine.dealInfos[bdnum].printHand()
-        # BboDDParTravLine.dealInfos[bdnum].printTableClassic()
         BboDDParTravLine.dealInfos[bdnum].printTable()
-        if not BboDDParTravLine.DealInfo.Testing:
-            BboDDParTravLine.dealInfos[bdnum].printPar()
-    
+        print()
