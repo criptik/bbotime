@@ -1,5 +1,5 @@
-times-%.out: travs-%
-	python3 bbotime.py --dir travs-$* --simclocked ${OPTS} >$@
+times-%.out: travs/%
+	python3 bbotime.py --dir travs/$* --simclocked ${OPTS} >$@
 
 all: times-$X.out
 

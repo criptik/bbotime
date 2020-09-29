@@ -20,23 +20,151 @@ import time
 import os
 from pprint import pprint
 
-from bboparse import BboParserBase, BboTravLineBase
+from bbobase import BboBase, BboTravLineBase
 
-global args
-
-travTableData = []
 map = {}
 players = {}
 partners = {}
 opps = {}
 
-class BboTimeParser(BboParserBase):
+class BboTimeReporter(BboBase):
     def appDescription(self):
         return 'BBO Tourney Time Analysis'
 
     def addParserArgs(self, parser):
         parser.add_argument('--tstart',  default=None, help='tournament start date/time')
         parser.add_argument('--simclocked', default=False, action='store_true', help='afterwards simulate as if clocked had been used')
+
+    def childGenReport(self):
+        # build default start time from directory name (if start time not supplied in args)
+        if self.args.tstart is None:
+            head, sep, tail = self.args.dir.partition('/')
+            if head == 'travs':
+                self.args.tstart = tail + ' 15:00'
+
+        self.initMap()
+
+        # at this point the robot names are fixed up if they could be
+        # so proceed as if there was no duplication of names
+        BboTimeTravLine.importArgs(self.args)
+        for bdnum in range (1, self.args.boards + 1):
+            # place rows in big table indexed by boardnumber and North and East names
+            for row in self.travTableData[bdnum]:
+                self.addToMaps(bdnum, row)
+
+        # With all files processed and in maps, go thru list of BboTimeTravLine objects
+        # and compute WaitEndTime (for end of round tlines)
+        # North and East point to same BboTimeTravLine object so only need to do one.
+        for bdnum in range (1, self.args.boards + 1):
+            # note only needed for end of round records and don't need last one
+            if bdnum % self.args.bpr == 0 and bdnum != self.args.boards:
+                for player in map[bdnum].keys():
+                    tline = map[bdnum][player]
+                    if player == tline.origNorth:
+                        tline.computeWaitEndTime()
+
+        # now startTimes
+        for bdnum in range (1, self.args.boards + 1):
+            for player in map[bdnum].keys():
+                tline = map[bdnum][player]
+                if player == tline.origNorth:
+                    tline.addStartTime()
+                    tline.iElapsed = tline.elapsed()
+
+        if self.args.debug:
+            self.printMap()
+
+        print(f'---------- Unclocked Report for game of {self.args.tstart} ----------------\n')
+
+        self.printHeader()
+        for p in sorted(players.keys()):
+            self.printPersonSummary(p)
+
+        if self.args.simclocked:
+            #  compute endTime using clocked algorithm
+            nextEndTime = {}
+
+            # for first board of each round, redo startTimes
+            for bdnum in range (1, self.args.boards + 1):
+                if bdnum % self.args.bpr == 1:
+                    for player in map[bdnum].keys():
+                        tline = map[bdnum][player]
+                        tline.addStartTime()
+                        nextEndTime[player] = tline.iStartTime             
+
+                # for first and other boards, update iEndTime using existing iElapsed
+                for player in map[bdnum].keys(): 
+                    tline = map[bdnum][player]
+                    nextEndTime[player] = nextEndTime[player] + tline.iElapsed * 60
+                    tline.iEndTime = nextEndTime[player]
+                    if self.args.debug:
+                        print(f'bdnum {bdnum}, player {player}, {tline}')
+
+                # if it's the last board in the round, now have proper iEndTime
+                # and we can compute WaitEndTime for last tline in Round
+                if bdnum % self.args.bpr == 0:
+                    for player in map[bdnum].keys(): 
+                        tline = map[bdnum][player]
+                        if player == tline.origNorth:            
+                            tline.computeWaitEndTime(clockedAlg=True)
+
+                if bdnum == 6 and self.args.debug:
+                    print('\n===========end of Board 6============')
+                    self.printMap()
+
+            if self.args.debug:
+                self.printMap()
+            print('\n\n----- Clocked Simulation Report -----')
+            self.printHeader()
+            for p in sorted(players.keys()):
+                self.printPersonSummary(p)
+
+    def initMap(self):
+        for n in range(1, self.args.boards+1):
+            map[n] = {}
+            opps[n] = {}
+
+
+    def addToMaps(self, bdnum, row):
+        tline = BboTimeTravLine(bdnum, row)
+        map[bdnum][tline.origNorth] = tline
+        map[bdnum][tline.origEast] = tline
+        players[tline.origNorth] = 1
+        players[tline.origEast] = 1
+        opps[bdnum][tline.origNorth] = tline.origEast
+        opps[bdnum][tline.origEast] = tline.origNorth
+
+
+    def printMap(self):
+        for bdnum in range(1, self.args.boards+1):
+            for k in sorted(map[bdnum].keys()):
+                print(bdnum, map[bdnum][k])
+
+    # header for summaries
+    def printHeader(self):
+        print('Round             ', end='')
+        for r in range(1, int(self.args.boards/self.args.bpr) + 1):
+            print(f'    {r:2}     ', end='')
+        print('     Totals')
+
+    def printPersonSummary(self, player):
+        print()
+        print(f'{player:>15}  |  ', end = '')
+        roundMins = 0
+        totalPlay = 0
+        totalWait = 0
+        for bdnum in range(1, self.args.boards+1):
+            tline = map[bdnum][player]
+            roundMins = roundMins + tline.iElapsed
+            waitMins = int(tline.waitMins())
+            if bdnum % self.args.bpr == 0:
+                print(f'{int(roundMins):2} +{int(waitMins):2}  |  ', end='')
+                totalPlay = totalPlay + roundMins
+                totalWait = totalWait + waitMins
+                roundMins = 0
+        print(f'  {int(totalPlay):3} + {int(totalWait):2}')
+
+
 
 class BboTimeTravLine(BboTravLineBase):
     def __init__(self, bdnum, row):
@@ -48,7 +176,7 @@ class BboTimeTravLine(BboTravLineBase):
         deps = {}
         if clockedAlg:
             # just include everyone as a dependency
-            for player in map[bdnum].keys():
+            for player in map[self.bdnum].keys():
                 deps[player] = 1
         else:
             # normal unclocked logic, compute dependencies
@@ -60,7 +188,7 @@ class BboTimeTravLine(BboTravLineBase):
             anotherPass = True
             while anotherPass:
                 startlen = len(deps.keys())
-                if args.debug and self.bdnum / args.bpr == 1:
+                if self.args.debug and self.bdnum / self.args.bpr == 1:
                     print('before', deps)
                 newdeps = {}
                 for dep in deps.keys():
@@ -70,17 +198,17 @@ class BboTimeTravLine(BboTravLineBase):
                     newdeps[thisRoundOppsNextOpp] = 1
                 deps.update(newdeps)
                 anotherPass = len(deps.keys()) > startlen
-                if args.debug and self.bdnum / args.bpr == 1:
+                if self.args.debug and self.bdnum / self.args.bpr == 1:
                     print('after', deps)
 
         # now find the maximum end time for the list of deps
         for dep in deps.keys():
-            self.waitEndTime = max(self.waitEndTime, map[bdnum][dep].iEndTime)
+            self.waitEndTime = max(self.waitEndTime, map[self.bdnum][dep].iEndTime)
 
     # addStartTime just uses prev round's end time, + any wait time for first boards in round
     def addStartTime(self):
         if self.bdnum == 1:
-            self.iStartTime = self.readTime(args.tstart)
+            self.iStartTime = self.readTime(self.args.tstart)
         else:
             prevTravNorth = map[self.bdnum-1][self.origNorth]
             self.iStartTime = prevTravNorth.waitEndTime
@@ -101,143 +229,8 @@ class BboTimeTravLine(BboTravLineBase):
                                                                                 self.iElapsed, self.waitMins() ))
         return mystr
 
-def initMap():
-    for n in range(1, args.boards+1):
-        map[n] = {}
-        opps[n] = {}
-        
-        
-def addToMaps(bdnum, row):
-    tline = BboTimeTravLine(bdnum, row)
-    map[bdnum][tline.origNorth] = tline
-    map[bdnum][tline.origEast] = tline
-    players[tline.origNorth] = 1
-    players[tline.origEast] = 1
-    opps[bdnum][tline.origNorth] = tline.origEast
-    opps[bdnum][tline.origEast] = tline.origNorth
-    
-
-def printMap():
-    for bdnum in range(1, args.boards+1):
-        for k in sorted(map[bdnum].keys()):
-            print(bdnum, map[bdnum][k])
-        
-# header for summaries
-def printHeader():
-    print('Round             ', end='')
-    for r in range(1, int(args.boards/args.bpr) + 1):
-        print(f'    {r:2}     ', end='')
-    print('     Totals')
-
-def printPersonSummary(player):
-    print()
-    print(f'{player:>15}  |  ', end = '')
-    roundMins = 0
-    totalPlay = 0
-    totalWait = 0
-    for bdnum in range(1, args.boards+1):
-        tline = map[bdnum][player]
-        roundMins = roundMins + tline.iElapsed
-        waitMins = int(tline.waitMins())
-        if bdnum % args.bpr == 0:
-            print(f'{int(roundMins):2} +{int(waitMins):2}  |  ', end='')
-            totalPlay = totalPlay + roundMins
-            totalWait = totalWait + waitMins
-            roundMins = 0
-    print(f'  {int(totalPlay):3} + {int(totalWait):2}')
-
     
         
 #-------- main stuff starts here -----------
-myBboParser = BboTimeParser()
-args = myBboParser.parseArguments()
-    
-# build default start time from directory name (if start time not supplied in args)
-if args.tstart is None:
-    head, sep, tail = args.dir.partition('-')
-    if head == 'travs':
-        args.tstart = tail + ' 15:00'
-
-if False:
-    print(args.__dict__)
-    sys.exit(1)
-
-initMap()
-#read all traveler files into travTableData
-travTableData = myBboParser.readAllTravFiles()
-
-# at this point the robot names are fixed up if they could be
-# so proceed as if there was no duplication of names
-BboTimeTravLine.importArgs(args)
-for bdnum in range (1, args.boards + 1):
-    # place rows in big table indexed by boardnumber and North and East names
-    for row in travTableData[bdnum]:
-        addToMaps(bdnum, row)
-    
-# With all files processed and in maps, go thru list of BboTimeTravLine objects
-# and compute WaitEndTime (for end of round tlines)
-# North and East point to same BboTimeTravLine object so only need to do one.
-for bdnum in range (1, args.boards + 1):
-    # note only needed for end of round records and don't need last one
-    if bdnum % args.bpr == 0 and bdnum != args.boards:
-        for player in map[bdnum].keys():
-            tline = map[bdnum][player]
-            if player == tline.origNorth:
-                tline.computeWaitEndTime()
-
-# now startTimes
-for bdnum in range (1, args.boards + 1):
-    for player in map[bdnum].keys():
-        tline = map[bdnum][player]
-        if player == tline.origNorth:
-            tline.addStartTime()
-            tline.iElapsed = tline.elapsed()
-            
-if args.debug:
-    printMap()
-
-print(f'---------- Unclocked Report for game of {args.tstart} ----------------\n')
-
-printHeader()
-for p in sorted(players.keys()):
-    printPersonSummary(p)
-
-if args.simclocked:
-    #  compute endTime using clocked algorithm
-    nextEndTime = {}
-
-    # for first board of each round, redo startTimes
-    for bdnum in range (1, args.boards + 1):
-        if bdnum % args.bpr == 1:
-            for player in map[bdnum].keys():
-                tline = map[bdnum][player]
-                tline.addStartTime()
-                nextEndTime[player] = tline.iStartTime             
-
-        # for first and other boards, update iEndTime using existing iElapsed
-        for player in map[bdnum].keys(): 
-            tline = map[bdnum][player]
-            nextEndTime[player] = nextEndTime[player] + tline.iElapsed * 60
-            tline.iEndTime = nextEndTime[player]
-            if args.debug:
-                print(f'bdnum {bdnum}, player {player}, {tline}')
-
-        # if it's the last board in the round, now have proper iEndTime
-        # and we can compute WaitEndTime for last tline in Round
-        if bdnum % args.bpr == 0:
-            for player in map[bdnum].keys(): 
-                tline = map[bdnum][player]
-                if player == tline.origNorth:            
-                    tline.computeWaitEndTime(clockedAlg=True)
-
-        if bdnum == 6 and args.debug:
-            print('\n===========end of Board 6============')
-            printMap()
-            
-    if args.debug:
-        printMap()
-    print('\n\n----- Clocked Simulation Report -----')
-    printHeader()
-    for p in sorted(players.keys()):
-        printPersonSummary(p)
+BboTimeReporter().genReport()
     

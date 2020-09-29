@@ -3,7 +3,7 @@ import time
 import os
 import itertools
 from pprint import pprint
-import bboparse
+import bbobase
 
 gibName = 'GiB'
 vsstr = ' vs. '
@@ -98,7 +98,7 @@ class BboRobotFixer(object):
     def buildRobotData(self, bdnum, row):
         # only do this if one of the two pairs is a robot pair
         for dir in ['North', 'East']:
-            if row[dir] == gibName and row[bboparse.partnerDir[dir]] == gibName:
+            if row[dir] == gibName and row[bbobase.partnerDir[dir]] == gibName:
                 self.addRobotScores(bdnum, row, dir)
 
     def robKeyOppNamesUnique(self, keylist):
@@ -157,7 +157,7 @@ class BboRobotFixer(object):
                     # todo: make this more robust if players start with the same substring
                     if row[direction].startswith(gibName) and row[oppdir].lower().startswith(oppname):
                         row[direction] = f'{gibName}-{robscore}'
-                        parddir = bboparse.partnerDir[direction]
+                        parddir = bbobase.partnerDir[direction]
                         row[parddir] = f'{gibName}-{robscore}-pard'
                         rowsChanged += 1
                         if self.args.debug:

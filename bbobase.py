@@ -9,11 +9,26 @@ from pprint import pprint
 import sys
 from bborobotfix import BboRobotFixer
 
-class BboParserBase(object):
+class BboBase(object):
 
     def __init__(self):
         pass
 
+    # the main work routine which reads in the traveler files into travTableData[]
+    # and then calls the child to do the rest of the work
+    def genReport(self):
+        self.args = self.parseArguments()
+        if self.args.debug:
+            print(args.__dict__)
+
+        #read all traveler files into travTableData
+        self.travTableData = self.readAllTravFiles()
+        self.childGenReport()
+
+    # to be overridden
+    def childGenReport(self):
+        pass
+    
     # this routine reads the html file for one traveller and uses BeautifulSoup
     # to return an array of rows, each a dict for a single row of the html file
     def parseFile(self, n):
@@ -89,7 +104,7 @@ class BboParserBase(object):
         return BboTravLineBase(self.args, bdnum, row)
 
     def appDescription(self):
-        return 'BBO Parser Base'
+        return 'BBO Base'
     
     def parseArguments(self):
         parser = argparse.ArgumentParser(self.appDescription())

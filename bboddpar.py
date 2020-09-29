@@ -15,22 +15,85 @@ import dds
 import ctypes
 import functions
 
-from bboparse import BboParserBase, BboTravLineBase
+from bbobase import BboBase, BboTravLineBase
 
-global args
+def nested_dict():
+    return collections.defaultdict(nested_dict)
 
-travTableData = []
 
-class BboDDParParser(BboParserBase):
+
+class BboDDParReporter(BboBase):
     def appDescription(self):
         return 'BBO Tourney Double Dummy Par Analysis'
 
     def addParserArgs(self, parser):
         pass
 
-def cardRank(c):
-    return '23456789TJQKA'.index(c)
+    def childGenReport(self):
+        BboDDParTravLine.importArgs(self.args)
+        travellers = {}
 
+        for bdnum in range (1, self.args.boards + 1):
+            travellers[bdnum] = []
+            for row in self.travTableData[bdnum]:
+                tline = BboDDParTravLine(bdnum, row)
+                # tline.getDDTable()
+                travellers[bdnum].append(tline)
+        # print('travTableData and travellers are set up')
+
+        if False:
+            # pprint(travellers)
+            # for each north and east player compare our score with the other results on that same traveller
+            # go thru and do comparisons for win, tie, loss
+            wlt = nested_dict()
+            for bdnum in range (1, self.args.boards + 1):
+                nsPoints = {}
+                ewPoints = {}
+                pctScores = {}
+                for tline in travellers[bdnum]:
+                    # print(tline.__dict__)
+                    for player in tline.playerDir[:2]:
+                        if tline.nsPoints is not None:
+                            playerIdx = tline.playerDir.index(player)
+                            points = tline.nsPoints if playerIdx in [0, 2] else (-1 * tline.nsPoints)
+                            pctScore = tline.nsScore if playerIdx in [0, 2] else (100 - tline.nsScore)
+                            if playerIdx == 0:
+                                nsPoints[player] = points
+                            else:
+                                ewPoints[player] = points
+                            pctScores[player] = pctScore
+                        if bdnum == 1:
+                            wlt[player]['w'] = 0
+                            wlt[player]['l'] = 0
+                            wlt[player]['t'] = 0
+
+                for pointMap in [nsPoints, ewPoints]:
+                    # pprint(pointMap)
+                    for playera in pointMap.keys():
+                        w = l = t = 0
+                        for playerb in pointMap.keys():
+                            if playerb != playera:
+                                if pointMap[playera] > pointMap[playerb]:
+                                    w += 1
+                                elif pointMap[playera] < pointMap[playerb]:
+                                    l += 1
+                                else:
+                                    t +=1
+                                # print(playera, playerb, pointMap[playera], pointMap[playerb], w, l, t)
+                        # print(bdnum, playera, pctScores[playera],  w, l, t)
+                        wlt[playera]['w'] += w
+                        wlt[playera]['l'] += l
+                        wlt[playera]['t'] += t
+
+            pprint(wlt)
+
+        # hand, ddtable and par display
+        if True:
+            for bdnum in range (1, self.args.boards + 1):
+                # print(f'{bdnum:2}: {BboDDParTravLine.dealInfos[bdnum].pbnDealString}')
+                BboDDParTravLine.dealInfos[bdnum].printHand()
+                BboDDParTravLine.dealInfos[bdnum].printTable()
+                print()
 
 
 
@@ -87,7 +150,7 @@ class BboDDParTravLine(BboTravLineBase):
             }
         Testing = False
         useSuitSym = True
-        
+
         def __init__(self, bdnum, pbnDealString):
             self.bdnum = bdnum
             self.DDdealsPBN = dds.ddTableDealsPBN()
@@ -99,6 +162,7 @@ class BboDDParTravLine(BboTravLineBase):
             self.ddTable = None
             self.parResults = None
             
+
         def getDDTable(self):
             if self.ddTable is None:
                 # print(f'...computing DD Table for bdnum {bdnum}')
@@ -236,8 +300,6 @@ class BboDDParTravLine(BboTravLineBase):
 
                 self.hands.append(missHand)
 
-
-
         def toPbnString(self):
             result = 'S:'  # BBO deals always start with 'S'
             for (i, hand) in enumerate(self.hands):
@@ -250,6 +312,10 @@ class BboDDParTravLine(BboTravLineBase):
         class Hand(object):
             def __init__(self):
                 self.suits = []
+
+            @staticmethod
+            def cardRank(c):
+                return '23456789TJQKA'.index(c)
 
             @classmethod
             def fromPbnHandStr(cls, handstr):
@@ -277,7 +343,7 @@ class BboDDParTravLine(BboTravLineBase):
                 for (n, suit) in enumerate(self.suits):
                     if n != 0:
                         result = result + '.'
-                    result = result + ''.join(sorted(suit, reverse=True, key=cardRank))
+                    result = result + ''.join(sorted(suit, reverse=True, key=self.cardRank))
                 return result
 
             def __str__(self):
@@ -288,84 +354,6 @@ class BboDDParTravLine(BboTravLineBase):
 
         
 
-def nested_dict():
-    return collections.defaultdict(nested_dict)
-
 #-------- main stuff starts here -----------
 
-myBboParser = BboDDParParser()
-args = myBboParser.parseArguments()
-if args.debug:
-    print(args.__dict__)
-
-travTableData = []
-
-#read all traveler files into travTableData
-travTableData = myBboParser.readAllTravFiles()
-BboDDParTravLine.importArgs(args)
-travellers = {}
-if BboDDParTravLine.DealInfo.Testing:
-    #temporary for testing
-    args.boards = 1 
-
-for bdnum in range (1, args.boards + 1):
-    travellers[bdnum] = []
-    for row in travTableData[bdnum]:
-        tline = BboDDParTravLine(bdnum, row)
-        # tline.getDDTable()
-        travellers[bdnum].append(tline)
-# print('travTableData and travellers are set up')
-
-if False:
-    # pprint(travellers)
-    # for each north and east player compare our score with the other results on that same traveller
-    # go thru and do comparisons for win, tie, loss
-    wlt = nested_dict()
-    for bdnum in range (1, args.boards + 1):
-        nsPoints = {}
-        ewPoints = {}
-        pctScores = {}
-        for tline in travellers[bdnum]:
-            # print(tline.__dict__)
-            for player in tline.playerDir[:2]:
-                if tline.nsPoints is not None:
-                    playerIdx = tline.playerDir.index(player)
-                    points = tline.nsPoints if playerIdx in [0, 2] else (-1 * tline.nsPoints)
-                    pctScore = tline.nsScore if playerIdx in [0, 2] else (100 - tline.nsScore)
-                    if playerIdx == 0:
-                        nsPoints[player] = points
-                    else:
-                        ewPoints[player] = points
-                    pctScores[player] = pctScore
-                if bdnum == 1:
-                    wlt[player]['w'] = 0
-                    wlt[player]['l'] = 0
-                    wlt[player]['t'] = 0
-
-        for pointMap in [nsPoints, ewPoints]:
-            # pprint(pointMap)
-            for playera in pointMap.keys():
-                w = l = t = 0
-                for playerb in pointMap.keys():
-                    if playerb != playera:
-                        if pointMap[playera] > pointMap[playerb]:
-                            w += 1
-                        elif pointMap[playera] < pointMap[playerb]:
-                            l += 1
-                        else:
-                            t +=1
-                        # print(playera, playerb, pointMap[playera], pointMap[playerb], w, l, t)
-                # print(bdnum, playera, pctScores[playera],  w, l, t)
-                wlt[playera]['w'] += w
-                wlt[playera]['l'] += l
-                wlt[playera]['t'] += t
-
-    pprint(wlt)
-
-# hand, ddtable and par display
-if True:
-    for bdnum in range (1, args.boards + 1):
-        # print(f'{bdnum:2}: {BboDDParTravLine.dealInfos[bdnum].pbnDealString}')
-        BboDDParTravLine.dealInfos[bdnum].printHand()
-        BboDDParTravLine.dealInfos[bdnum].printTable()
-        print()
+BboDDParReporter().genReport()
