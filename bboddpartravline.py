@@ -177,11 +177,13 @@ class BboDDParTravLine(BboTravLineBase):
             }
             return strmap[self.getVulIndex()]
         
-        def getPar(self):
+        def getNSPar(self):
             self.getDDTable()
             if self.parResults is None:
                 self.computePar()
-
+            pcontents = ctypes.pointer(self.parResults).contents
+            return int(pcontents.score)
+        
         def computePar(self):
             self.getDDTable()
             self.parResults = dds.parResultsDealer()

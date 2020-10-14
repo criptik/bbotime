@@ -19,7 +19,7 @@ class BboBase(object):
     def genReport(self):
         self.args = self.parseArguments()
         if self.args.debug:
-            print(args.__dict__)
+            print(self.args.__dict__)
 
         #read all traveler files into travTableData
         self.travTableData = self.readAllTravFiles()
@@ -151,10 +151,10 @@ class BboTravLineBase(object):
     origPartners = {}   # class variable
     def __init__(self, bdnum, row):
         self.bdnum = bdnum
-        self.north = n = row['North'].lower()
-        self.south = s = row['South'].lower()
-        self.east  = e = row['East'].lower()
-        self.west  = w = row['West'].lower()
+        self.north = n = self.nameForDirection(row, 'North')
+        self.south = s = self.nameForDirection(row, 'South')
+        self.east  = e = self.nameForDirection(row, 'East')
+        self.west  = w = self.nameForDirection(row, 'West')
         self.playerDir = [self.north, self.east, self.south, self.west]
         if bdnum == 1:
             # record original partners in case a substitution happens later
@@ -207,10 +207,18 @@ class BboTravLineBase(object):
             pprint(self.__dict__)
             # sys.exit(1)
 
+    # handles gib-gib partnership as special case
+    def nameForDirection(self, row, dir):
+        name = row[dir].lower()
+        if name != 'gib':
+            return name
+        else:
+            return 'gib-ne' if dir in ['North', 'East'] else 'gib-sw'
+    
     # this thing also handles if a sub came in as a replacement
     def origNameForDirection(self, row, dir):
-        name = row[dir].lower()
-        pard = row[partnerDir[dir]].lower()
+        name = self.nameForDirection(row, dir)
+        pard = self.nameForDirection(row, partnerDir[dir])
         if name in self.origPartners.keys():
             return name
         else:

@@ -19,6 +19,7 @@ import sys
 import time
 import os
 from pprint import pprint
+import tabulate
 
 from bbobase import BboBase, BboTravLineBase
 
@@ -75,11 +76,8 @@ class BboTimeReporter(BboBase):
             self.printMap()
 
         print(f'---------- Unclocked Report for game of {self.args.tstart} ----------------\n')
-
-        self.printHeader()
-        for p in sorted(players.keys()):
-            self.printPersonSummary(p)
-
+        self.printSummary()
+        
         if self.args.simclocked:
             #  compute endTime using clocked algorithm
             nextEndTime = {}
@@ -140,16 +138,41 @@ class BboTimeReporter(BboBase):
             for k in sorted(map[bdnum].keys()):
                 print(bdnum, map[bdnum][k])
 
+    def printSummary(self):
+        rounds = int(self.args.boards/self.args.bpr)
+        numpairs = len(players)
+        numtables = int(numpairs/2)
+        numcols = rounds + 2  # add in name and totals
+        self.hdrRows = numrows = 1 + numtables + 1
+        numrows = self.hdrRows + numpairs*2
+        self.tab = [['' for i in range(numcols)] for j in range(numrows)]
+        self.addHeaderInfo()
+        for (pidx, p) in enumerate(sorted(players.keys())):
+            self.addPersonInfo(p, pidx)
+        calist = ['right']
+        for n in range(numcols-2):
+            calist.append('center')
+        calist.append('right')
+        print(tabulate.tabulate(self.tab, tablefmt='plain', colalign=calist))
+        
     # header for summaries
-    def printHeader(self):
-        print('Round             ', end='')
+    def addHeaderInfo(self):
+        self.tab[0][0] = 'Round  |'
+        self.tab[0][-1] = 'Totals'
+        # for each round put in round number followed by who played who
         for r in range(1, int(self.args.boards/self.args.bpr) + 1):
-            print(f'    {r:2}     ', end='')
-        print('     Totals')
-
-    def printPersonSummary(self, player):
-        print()
-        print(f'{player:>15}  |  ', end = '')
+            self.tab[0][r] = f'    {r:2}     '
+            bdnum = (r-1) * self.args.bpr + 1
+            rowidx = 1
+            for player in map[bdnum].keys():
+                tline = map[bdnum][player]
+                if tline.origNorth == player:
+                    self.tab[rowidx][r] = f'{tline.origNorth[0:3]}-{tline.origEast[0:3]}'
+                    rowidx += 1
+                    
+    def addPersonInfo(self, player, pidx):
+        r = self.hdrRows + pidx * 2
+        self.tab[r][0] = f'{player:>15}  |  '
         roundMins = 0
         totalPlay = 0
         totalWait = 0
@@ -158,12 +181,13 @@ class BboTimeReporter(BboBase):
             roundMins = roundMins + tline.iElapsed
             waitMins = int(tline.waitMins())
             if bdnum % self.args.bpr == 0:
-                print(f'{int(roundMins):2} +{int(waitMins):2}  |  ', end='')
+                col = int(bdnum/self.args.bpr)
+                self.tab[r][col] = f'{int(roundMins):02} +{int(waitMins):2}  |  '
                 totalPlay = totalPlay + roundMins
                 totalWait = totalWait + waitMins
                 roundMins = 0
-        print(f'  {int(totalPlay):3} + {int(totalWait):2}')
-
+        self.tab[r][-1] = f'  {int(totalPlay):3} + {int(totalWait):2}'
+        
 
 
 class BboTimeTravLine(BboTravLineBase):
