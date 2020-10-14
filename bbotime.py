@@ -35,6 +35,7 @@ class BboTimeReporter(BboBase):
     def addParserArgs(self, parser):
         parser.add_argument('--tstart',  default=None, help='tournament start date/time')
         parser.add_argument('--simclocked', default=False, action='store_true', help='afterwards simulate as if clocked had been used')
+        parser.add_argument('--rowsPerPlayer', default=1, type=int, help='rows per player in table')
 
     def childGenReport(self):
         # build default start time from directory name (if start time not supplied in args)
@@ -75,7 +76,7 @@ class BboTimeReporter(BboBase):
         if self.args.debug:
             self.printMap()
 
-        print(f'---------- Unclocked Report for game of {self.args.tstart} ----------------\n')
+        print(f'\nUnclocked Report for game of {self.args.tstart}')
         self.printSummary()
         
         if self.args.simclocked:
@@ -112,10 +113,8 @@ class BboTimeReporter(BboBase):
 
             if self.args.debug:
                 self.printMap()
-            print('\n\n----- Clocked Simulation Report -----')
-            self.printHeader()
-            for p in sorted(players.keys()):
-                self.printPersonSummary(p)
+            print('\n\nClocked Simulation Report')
+            self.printSummary()
 
     def initMap(self):
         for n in range(1, self.args.boards+1):
@@ -144,21 +143,21 @@ class BboTimeReporter(BboBase):
         numtables = int(numpairs/2)
         numcols = rounds + 2  # add in name and totals
         self.hdrRows = numrows = 1 + numtables + 1
-        numrows = self.hdrRows + numpairs*2
+        numrows = self.hdrRows + numpairs * self.args.rowsPerPlayer
         self.tab = [['' for i in range(numcols)] for j in range(numrows)]
         self.addHeaderInfo()
         for (pidx, p) in enumerate(sorted(players.keys())):
             self.addPersonInfo(p, pidx)
-        calist = ['right']
-        for n in range(numcols-2):
+        calist = []
+        for n in range(numcols):
             calist.append('center')
-        calist.append('right')
-        print(tabulate.tabulate(self.tab, tablefmt='plain', colalign=calist))
+        calist[0] = calist[-1] = 'right'
+        print(tabulate.tabulate(self.tab, tablefmt='pretty', colalign=calist))
         
     # header for summaries
     def addHeaderInfo(self):
-        self.tab[0][0] = 'Round  |'
-        self.tab[0][-1] = 'Totals'
+        self.tab[0][0] = 'Round->'
+        self.tab[0][-1] = '-Totals-'
         # for each round put in round number followed by who played who
         for r in range(1, int(self.args.boards/self.args.bpr) + 1):
             self.tab[0][r] = f'    {r:2}     '
@@ -167,12 +166,13 @@ class BboTimeReporter(BboBase):
             for player in map[bdnum].keys():
                 tline = map[bdnum][player]
                 if tline.origNorth == player:
-                    self.tab[rowidx][r] = f'{tline.origNorth[0:3]}-{tline.origEast[0:3]}'
+                    charsPerName = 3
+                    self.tab[rowidx][r] = f'{tline.origNorth[0:charsPerName]}-{tline.origEast[0:charsPerName]}'
                     rowidx += 1
                     
     def addPersonInfo(self, player, pidx):
-        r = self.hdrRows + pidx * 2
-        self.tab[r][0] = f'{player:>15}  |  '
+        r = self.hdrRows + pidx * self.args.rowsPerPlayer
+        self.tab[r][0] = player
         roundMins = 0
         totalPlay = 0
         totalWait = 0
@@ -182,7 +182,7 @@ class BboTimeReporter(BboBase):
             waitMins = int(tline.waitMins())
             if bdnum % self.args.bpr == 0:
                 col = int(bdnum/self.args.bpr)
-                self.tab[r][col] = f'{int(roundMins):02} +{int(waitMins):2}  |  '
+                self.tab[r][col] = f'{int(roundMins):2} +{int(waitMins):2}'
                 totalPlay = totalPlay + roundMins
                 totalWait = totalWait + waitMins
                 roundMins = 0
