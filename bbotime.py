@@ -36,6 +36,8 @@ class BboTimeReporter(BboBase):
         parser.add_argument('--tstart',  default=None, help='tournament start date/time')
         parser.add_argument('--simclocked', default=False, action='store_true', help='afterwards simulate as if clocked had been used')
         parser.add_argument('--rowsPerPlayer', default=1, type=int, help='rows per player in table')
+        parser.add_argument('--tablefmt', default='pretty', help='tabulate table format')
+        parser.add_argument('--minsPerBoard', default=6, type=int, help='minutes allowed per board (for simclocked)')
 
     def childGenReport(self):
         # build default start time from directory name (if start time not supplied in args)
@@ -76,8 +78,7 @@ class BboTimeReporter(BboBase):
         if self.args.debug:
             self.printMap()
 
-        print(f'\nUnclocked Report for game of {self.args.tstart}')
-        self.printSummary()
+        self.printSummary(f'\nUnclocked Report for {self.args.tstart}')
         
         if self.args.simclocked:
             #  compute endTime using clocked algorithm
@@ -86,6 +87,7 @@ class BboTimeReporter(BboBase):
             # for first board of each round, redo startTimes
             for bdnum in range (1, self.args.boards + 1):
                 if bdnum % self.args.bpr == 1:
+                    bdnumFirstInRound = bdnum
                     for player in map[bdnum].keys():
                         tline = map[bdnum][player]
                         tline.addStartTime()
@@ -94,8 +96,16 @@ class BboTimeReporter(BboBase):
                 # for first and other boards, update iEndTime using existing iElapsed
                 for player in map[bdnum].keys(): 
                     tline = map[bdnum][player]
-                    nextEndTime[player] = nextEndTime[player] + tline.iElapsed * 60
+                    unclockedEndTime = nextEndTime[player] + tline.iElapsed * 60
+                    roundStartTime = map[bdnumFirstInRound][player].iStartTime
+                    clockedEndTimeLimit = roundStartTime + self.args.minsPerBoard * self.args.bpr * 60
+                    nextEndTime[player] = min(unclockedEndTime, clockedEndTimeLimit)
                     tline.iEndTime = nextEndTime[player]
+                    if clockedEndTimeLimit < unclockedEndTime:
+                        if self.args.debug:
+                            print('exceed clocked time limit:', bdnum, player, (unclockedEndTime-roundStartTime)/60, (clockedEndTimeLimit-roundStartTime)/60)
+                        tline.iElapsed -= (unclockedEndTime - clockedEndTimeLimit)/60
+                        tline.clockedTruncation = True 
                     if self.args.debug:
                         print(f'bdnum {bdnum}, player {player}, {tline}')
 
@@ -105,16 +115,12 @@ class BboTimeReporter(BboBase):
                     for player in map[bdnum].keys(): 
                         tline = map[bdnum][player]
                         if player == tline.origNorth:            
+                            # print(bdnum, player, (tline.iEndTime-roundStartTime)/60)
                             tline.computeWaitEndTime(clockedAlg=True)
-
-                if bdnum == 6 and self.args.debug:
-                    print('\n===========end of Board 6============')
-                    self.printMap()
 
             if self.args.debug:
                 self.printMap()
-            print('\n\nClocked Simulation Report')
-            self.printSummary()
+            self.printSummary(f'\n\nClocked Simulation for {self.args.tstart}')
 
     def initMap(self):
         for n in range(1, self.args.boards+1):
@@ -137,7 +143,8 @@ class BboTimeReporter(BboBase):
             for k in sorted(map[bdnum].keys()):
                 print(bdnum, map[bdnum][k])
 
-    def printSummary(self):
+    def printSummary(self, title):
+        print(title)
         rounds = int(self.args.boards/self.args.bpr)
         numpairs = len(players)
         numtables = int(numpairs/2)
@@ -152,53 +159,58 @@ class BboTimeReporter(BboBase):
         for n in range(numcols):
             calist.append('center')
         calist[0] = calist[-1] = 'right'
-        print(tabulate.tabulate(self.tab, tablefmt='pretty', colalign=calist))
+        print(tabulate.tabulate(self.tab, tablefmt=self.args.tablefmt, colalign=calist))
         
     # header for summaries
     def addHeaderInfo(self):
         self.tab[0][0] = 'Round->'
         self.tab[0][-1] = '-Totals-'
         # for each round put in round number followed by who played who
-        for r in range(1, int(self.args.boards/self.args.bpr) + 1):
-            self.tab[0][r] = f'    {r:2}     '
-            bdnum = (r-1) * self.args.bpr + 1
+        for rnd in range(1, int(self.args.boards/self.args.bpr) + 1):
+            self.tab[0][rnd] = f'    {rnd:2}     '
+            bdnum = (rnd-1) * self.args.bpr + 1
             rowidx = 1
             for player in map[bdnum].keys():
                 tline = map[bdnum][player]
                 if tline.origNorth == player:
                     charsPerName = 3
-                    self.tab[rowidx][r] = f'{tline.origNorth[0:charsPerName]}-{tline.origEast[0:charsPerName]}'
+                    self.tab[rowidx][rnd] = f'{tline.origNorth[0:charsPerName]}-{tline.origEast[0:charsPerName]}'
                     rowidx += 1
                     
     def addPersonInfo(self, player, pidx):
-        r = self.hdrRows + pidx * self.args.rowsPerPlayer
-        self.tab[r][0] = player
-        roundMins = 0
+        row = self.hdrRows + pidx * self.args.rowsPerPlayer
+        self.tab[row][0] = player
         totalPlay = 0
         totalWait = 0
-        for bdnum in range(1, self.args.boards+1):
-            tline = map[bdnum][player]
-            roundMins = roundMins + tline.iElapsed
-            waitMins = int(tline.waitMins())
-            if bdnum % self.args.bpr == 0:
-                col = int(bdnum/self.args.bpr)
-                self.tab[r][col] = f'{int(roundMins):2} +{int(waitMins):2}'
-                totalPlay = totalPlay + roundMins
-                totalWait = totalWait + waitMins
-                roundMins = 0
-        self.tab[r][-1] = f'  {int(totalPlay):3} + {int(totalWait):2}'
-        
+        for rnd in range(1, int(self.args.boards/self.args.bpr) + 1):
+            roundMins = self.roundElapsedMins(rnd, player)
+            tlineLastInRound = map[rnd * self.args.bpr][player]
+            waitMins = tlineLastInRound.waitMins()
+            specialChar = ' ' if not tlineLastInRound.clockedTruncation else '*'
+            col = rnd
+            self.tab[row][col] = f'{int(roundMins):2}{specialChar}+{int(waitMins):2}'
+            totalPlay += roundMins
+            totalWait += waitMins
+        self.tab[row][-1] = f'  {int(totalPlay):3} + {int(totalWait):2}'
+
+    # return elapsedTime and waitTime for that round
+    def roundElapsedMins(self, rnd, player):
+        bdnumLastInRound = rnd * self.args.bpr
+        bdnumFirstInRound = bdnumLastInRound - self.args.bpr + 1
+        return (map[bdnumLastInRound][player].iEndTime - map[bdnumFirstInRound][player].iStartTime) / 60
 
 
 class BboTimeTravLine(BboTravLineBase):
     def __init__(self, bdnum, row):
         super(BboTimeTravLine, self).__init__(bdnum, row)
         self.waitEndTime = self.iEndTime  # for end of round records this will be adjusted later
-
+        self.clockedTruncation = False
+        
     # for end of round tlines, compute dependenciesx
     def computeWaitEndTime(self, clockedAlg=False):
         deps = {}
         if clockedAlg:
+            self.waitEndTime = 0  # will be computed from iEndTimes below
             # just include everyone as a dependency
             for player in map[self.bdnum].keys():
                 deps[player] = 1
@@ -229,6 +241,7 @@ class BboTimeTravLine(BboTravLineBase):
         for dep in deps.keys():
             self.waitEndTime = max(self.waitEndTime, map[self.bdnum][dep].iEndTime)
 
+                
     # addStartTime just uses prev round's end time, + any wait time for first boards in round
     def addStartTime(self):
         if self.bdnum == 1:
