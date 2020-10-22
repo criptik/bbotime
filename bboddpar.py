@@ -14,6 +14,7 @@ sys.path.append('./python-dds/examples')
 import dds
 import ctypes
 import functions
+import hands
 
 from bbobase import BboBase
 from bboddpartravline import BboDDParTravLine
@@ -30,61 +31,15 @@ class BboDDParReporter(BboBase):
 
     def childGenReport(self):
         BboDDParTravLine.importArgs(self.args)
-        travellers = {}
+        self.travellers = {}
 
         for bdnum in range (1, self.args.boards + 1):
-            travellers[bdnum] = []
+            self.travellers[bdnum] = []
             for row in self.travTableData[bdnum]:
                 tline = BboDDParTravLine(bdnum, row)
                 # tline.getDDTable()
-                travellers[bdnum].append(tline)
+                self.travellers[bdnum].append(tline)
         # print('travTableData and travellers are set up')
-
-        if False:
-            # pprint(travellers)
-            # for each north and east player compare our score with the other results on that same traveller
-            # go thru and do comparisons for win, tie, loss
-            wlt = nested_dict()
-            for bdnum in range (1, self.args.boards + 1):
-                nsPoints = {}
-                ewPoints = {}
-                pctScores = {}
-                for tline in travellers[bdnum]:
-                    # print(tline.__dict__)
-                    for player in tline.playerDir[:2]:
-                        if tline.nsPoints is not None:
-                            playerIdx = tline.playerDir.index(player)
-                            points = tline.nsPoints if playerIdx in [0, 2] else (-1 * tline.nsPoints)
-                            pctScore = tline.nsScore if playerIdx in [0, 2] else (100 - tline.nsScore)
-                            if playerIdx == 0:
-                                nsPoints[player] = points
-                            else:
-                                ewPoints[player] = points
-                            pctScores[player] = pctScore
-                        if bdnum == 1:
-                            wlt[player]['w'] = 0
-                            wlt[player]['l'] = 0
-                            wlt[player]['t'] = 0
-
-                for pointMap in [nsPoints, ewPoints]:
-                    # pprint(pointMap)
-                    for playera in pointMap.keys():
-                        w = l = t = 0
-                        for playerb in pointMap.keys():
-                            if playerb != playera:
-                                if pointMap[playera] > pointMap[playerb]:
-                                    w += 1
-                                elif pointMap[playera] < pointMap[playerb]:
-                                    l += 1
-                                else:
-                                    t +=1
-                                # print(playera, playerb, pointMap[playera], pointMap[playerb], w, l, t)
-                        # print(bdnum, playera, pctScores[playera],  w, l, t)
-                        wlt[playera]['w'] += w
-                        wlt[playera]['l'] += l
-                        wlt[playera]['t'] += t
-
-            pprint(wlt)
 
         # hand, ddtable and par display
         if True:
@@ -92,10 +47,64 @@ class BboDDParReporter(BboBase):
                 # print(f'{bdnum:2}: {BboDDParTravLine.dealInfos[bdnum].pbnDealString}')
                 BboDDParTravLine.dealInfos[bdnum].printHand()
                 BboDDParTravLine.dealInfos[bdnum].printTable()
+                self.showOptimumLeadsAllContracts(bdnum)
                 print()
 
+    def showOptimumLeadsAllContracts(self, bdnum):
+        print('Optimum Leads for Bid Contracts')
+        # only need to show "different" contracts
+        contractMap = {}
+        for tline in self.travellers[bdnum]:
+            key = f'{tline.contract} by {tline.decl}'
+            contractMap[key] = tline
 
+        # now for each different contract show optimum leads
+        for key in contractMap.keys():
+            tline = contractMap[key]
+            futs = tline.getOptimumLeads()
+            optLeadStr = self.getOptLeadStr(futs, tline)
+            print(f' {key}: {optLeadStr}')
+            print()
 
+    def getOptLeadStr(self, futs, tline):
+        str = ''
+        futcon = ctypes.pointer(futs).contents
+        cardMap = {}
+        for suit in 'SHDC':
+            cardMap[suit] = 0
+        for i in range(futcon.cards):
+            res = ctypes.create_string_buffer(15)
+            # add the returned rank into the "Holding"
+            holdingVal = futcon.equals[i] | (1 << futcon.rank[i])
+            suitChr = self.getSuitChr(futcon.suit[i])
+            cardMap[suitChr] |= holdingVal
+            # print(suitChr, self.getRankChr(futcon.rank[i]), futcon.rank[i], futcon.equals[i], holdingVal, cardMap[suitChr])
+
+        for suit in 'SHDC':
+            holdingVal = cardMap[suit]
+            if holdingVal != 0:
+                holdingStr = self.holdingToStr(holdingVal)
+                holdingSet = set(holdingStr)
+                handSet = BboDDParTravLine.dealInfos[tline.bdnum].pbnDeal.getCardSet(tline.getLeaderIndex(), suit)
+                cardStr = 'any' if holdingSet == handSet else holdingStr
+                str += f'{suit}:{cardStr} '
+                
+        return str
+
+    @staticmethod
+    def getSuitChr(idx):
+        return 'SHDCN'[idx]
+
+    @staticmethod
+    def getRankChr(idx):
+        return 'xx23456789TJQKA'[idx]
+
+    def holdingToStr(self, holding):
+        str = ''
+        for i in range(14, 1, -1):
+            if holding & (1 << i) != 0:
+                str += self.getRankChr(i)
+        return str
 
 #-------- main stuff starts here -----------
 

@@ -27,6 +27,8 @@ class BboDDParTravLine(BboTravLineBase):
         # convert the captured LIN string into a pbn deal specification
         if BboDDParTravLine.dealInfos.get(bdnum) is None:
             BboDDParTravLine.dealInfos[bdnum] = self.DealInfo(self.bdnum, self.linToPbnDeal())
+        (self.playString, self.claimed) = self.linToPbnPlayString()
+        self.playCount = int(len(self.playString)/2)
         
     def linToPbnDeal(self):
         s = self.linStr
@@ -52,15 +54,117 @@ class BboDDParTravLine(BboTravLineBase):
         for handstr in str3Hands:
             hands.append(self.Deal.Hand.fromPbnHandStr(handstr))
         mydeal = self.Deal(hands)
-
-        pbnDealString = mydeal.toPbnString()
-        # print('dealpbn= ', pbnDealString)
-        return pbnDealString
-
+        return mydeal
+    
+    def linToPbnPlayString(self):
+        s = self.linStr
+        # subsitute % symbols
+        s = re.sub('%7C', '|', s)
+        s = re.sub('%2C', ' ', s)
+        # get rid of everything up to play info
+        s = re.sub('^.*?pc\|', '|pc|', s)
+        # and everything after
+        s = re.sub("\|'\);this.*$", '', s)
+        # strip down to only the cards played (get rid of |pc|)
+        s = re.sub('\|pc\|', '', s)
+        # string returned could have claim info at end, if so break that out
+        splits = re.split('\|mc\|', s)
+        if len(splits) == 1:
+            splits.append(None)   # no claim info
+        else:
+            splits[1] = int(splits[1])  # amount claimed
+        return splits
+        
     def getDDTable(self):
         dealInfo = BboDDParTravLine.dealInfos[self.bdnum]
         return dealInfo.getDDTable()
-            
+
+    def getTrumpIndex(self):
+        return 'SHDCN'.index(self.trumpstr)
+
+    def getLeaderIndex(self):
+        # the hand leading to the first trick
+        # where N=0, E=1, S=2, W=3
+        declIdx = 'NESW'.index(self.decl)
+        return (declIdx + 1) % 4
+
+    def buildDealPBN(self, dlPBN):
+        dlPBN.trump = self.getTrumpIndex()
+        # dlPBN.first is the index of the hand leading to the first trick
+        # where N=0, E=1, S=2, W=3
+        dlPBN.first = self.getLeaderIndex()
+        dealInfo = BboDDParTravLine.dealInfos[self.bdnum]
+        for n in range(3):
+            dlPBN.currentTrickSuit[n] = dlPBN.currentTrickRank[n] = 0
+        dlPBN.remainCards = dealInfo.pbnDealString.encode('utf-8')
+        
+    def getPlayAnalysis(self):
+        if self.decl is None:
+            return
+        dlPBN = dds.dealPBN()
+        DDplayPBN = dds.playTracePBN()
+        solved = dds.solvedPlay()
+        # fill in dlPBN fields
+        self.buildDealPBN(dlPBN)
+        # print(dlPBN.trump,  dlPBN.first, dlPBN.remainCards)
+        DDplayPBN.number = self.playCount
+        DDplayPBN.cards = self.playString.encode('utf=8')
+        # print(DDplayPBN.number, DDplayPBN.cards)
+        threadIndex = 0
+        res = dds.AnalysePlayPBN(
+            dlPBN,
+            DDplayPBN,
+            ctypes.pointer(solved),
+            threadIndex)
+
+        # functions.PrintPBNPlay(ctypes.pointer(DDplayPBN), ctypes.pointer(solved))
+        psolved = ctypes.pointer(solved)
+        pplayp = ctypes.pointer(DDplayPBN)
+        print(f'DD Expected Tricks: {psolved.contents.tricks[0]}')
+        for i in range(1, psolved.contents.number):
+            sep = '|' if i % 4 == 0 else ' '
+            print(f'{chr(pplayp.contents.cards[2 * (i - 1)])}{chr(pplayp.contents.cards[2 * i - 1])}{sep}', end='')
+        print()
+        lasttrix = -1
+        for i in range(1, psolved.contents.number):
+            trix = psolved.contents.tricks[i]
+            trixStr = '  ' if trix == lasttrix else f'{trix:2}'
+            print(f'{trixStr} ', end='')
+            lasttrix = trix
+        print()
+        
+        # sys.exit(1)
+        # DDPlayPBN 
+
+    def getOptimumLeads(self):
+        dlPBN = dds.dealPBN()
+        fut2 = dds.futureTricks()
+        threadIndex = 0
+        line = ctypes.create_string_buffer(80)
+        dds.SetMaxThreads(0)
+        # fill in dlPBN fields
+        self.buildDealPBN(dlPBN)
+        target = -1
+        solutions = 2
+        mode = 0
+        res = dds.SolveBoardPBN(
+            dlPBN,
+            target,
+            solutions,
+            mode,
+            ctypes.pointer(fut2),
+            0)
+        
+        if res != dds.RETURN_NO_FAULT:
+            dds.ErrorMessage(res, line)
+            print("DDS error {}".format(line.value.decode("utf-8")))
+
+        if False:
+            line = f'{self.bdnum}: Optimum Leads against {self.contract} by {self.decl}'
+            functions.PrintFut(line, ctypes.pointer(fut2))
+
+        return fut2
+    
     # inner class DealInfo
     class DealInfo(object):
         SuitSyms = {
@@ -72,13 +176,17 @@ class BboDDParTravLine(BboTravLineBase):
         Testing = False
         useSuitSym = True
 
-        def __init__(self, bdnum, pbnDealString):
+        def __init__(self, bdnum, pbnDeal):
+            pbnDealString = pbnDeal.toPbnString()
+            # print('dealpbn= ', pbnDealString)
             self.bdnum = bdnum
             self.DDdealsPBN = dds.ddTableDealsPBN()
             self.DDdealsPBN.noOfTables = 1
+            
             self.DDdealsPBN.deals[0].cards = pbnDealString.encode('utf-8')
             self.pbnDealString = pbnDealString  #saved in case we need it later
-
+            self.pbnDeal = pbnDeal
+            
             # other fields left for later computation
             self.ddTable = None
             self.parResults = None
@@ -163,7 +271,7 @@ class BboDDParTravLine(BboTravLineBase):
             return (self.bdnum-1) % 4
             
         def getDealerStr(self):
-            return 'NEWS'[self.getDealerIndex()]
+            return 'NESW'[self.getDealerIndex()]
             
         def getVulIndex(self):
             return [0,2,3,1,2,3,1,0,3,1,0,2,1,0,2,3][(self.bdnum-1) % 16]
@@ -206,7 +314,10 @@ class BboDDParTravLine(BboTravLineBase):
         def printParClassic(self):
             print(f'Par for board {bdnum}')
             self.computePar()
-            functions.PrintDealerPar(ctypes.pointer(self.parResults))    
+            functions.PrintDealerPar(ctypes.pointer(self.parResults))
+
+        def cardsStr(self, player, suit):
+            pass
             
     # inner class Deal
     class Deal(object):
@@ -231,6 +342,14 @@ class BboDDParTravLine(BboTravLineBase):
                 result = result + hand.toPbnString()
             return result
 
+        def getCardSet(self, playerIdx, suit):
+            # in dds, player indices are N=0, E=1, S=2, W=3
+            # but in our hand, the suits are always in order S, W, N, E
+            handIdx = (playerIdx + 2) % 4
+            # within a hand, suits are always S, H, D, C
+            suitIdx = 'SHDC'.index(suit)
+            return self.hands[handIdx].suits[suitIdx]
+            
         # inner class Deal.Hand
         class Hand(object):
             def __init__(self):

@@ -179,10 +179,9 @@ class BboTravLineBase(object):
             print(resstr, len(resstr))
         if resstr.startswith('PASS') or resstr.startswith('A'):
             # special case for passed out or averages
-            self.contract = None
-            self.dblstr = None
-            self.decl  = None
+            self.contract = self.dblstr = self.decl = self.trumpstr = None
             self.result = 0
+            self.tricks = 0
         else:
             # normal (not passed out) hands
             m = re.search(r'([0-9])(.*?)(x{0,2})([NSEW])(=|\+[0-9]*|\-[0-9]*)', resstr)
@@ -199,10 +198,12 @@ class BboTravLineBase(object):
                        '\N{BLACK CLUB SUIT}' :  'C',
                        'N'       :  'N' }
             suitstr = suitmap[suitstr]
+            self.trumpstr = suitstr
             self.contract = f'{level}{suitstr}'
             self.dblstr = dblstr
             self.decl  = decl
             self.result = 0 if result == '=' else int(result)
+            self.tricks = int(level) + 6 + self.result
         if self.args.debug:
             pprint(self.__dict__)
             # sys.exit(1)
