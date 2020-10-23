@@ -50,13 +50,25 @@ class BboDDParReporter(BboBase):
                 self.showOptimumLeadsAllContracts(bdnum)
                 print()
 
+    @staticmethod
+    def subSuitSym(str):
+        suitSyms = BboDDParTravLine.DealInfo.SuitSyms
+        for suit in suitSyms.keys():
+            str = re.sub(f'{suit}', f'{suitSyms[suit]}', str)
+        return str
+    
     def showOptimumLeadsAllContracts(self, bdnum):
         print('Optimum Leads for Bid Contracts')
+        print('-------------------------------')
         # only need to show "different" contracts
+        # where "different" means just trump and declarer (level insignificant)
         contractMap = {}
         for tline in self.travellers[bdnum]:
-            key = f'{tline.contract} by {tline.decl}'
-            contractMap[key] = tline
+            if tline.trumpstr is not None:
+                trumpStr = self.subSuitSym(tline.trumpstr)
+                trumpStr = 'NT' if trumpStr == 'N' else f' {trumpStr}'
+                key = f'{trumpStr} by {tline.decl}'
+                contractMap[key] = tline
 
         # now for each different contract show optimum leads
         for key in contractMap.keys():
@@ -64,10 +76,9 @@ class BboDDParReporter(BboBase):
             futs = tline.getOptimumLeads()
             optLeadStr = self.getOptLeadStr(futs, tline)
             print(f' {key}: {optLeadStr}')
-            print()
+        print()
 
     def getOptLeadStr(self, futs, tline):
-        str = ''
         futcon = ctypes.pointer(futs).contents
         cardMap = {}
         for suit in 'SHDC':
@@ -80,6 +91,8 @@ class BboDDParReporter(BboBase):
             cardMap[suitChr] |= holdingVal
             # print(suitChr, self.getRankChr(futcon.rank[i]), futcon.rank[i], futcon.equals[i], holdingVal, cardMap[suitChr])
 
+        totalOpts = 0
+        optStr = ''
         for suit in 'SHDC':
             holdingVal = cardMap[suit]
             if holdingVal != 0:
@@ -87,9 +100,11 @@ class BboDDParReporter(BboBase):
                 holdingSet = set(holdingStr)
                 handSet = BboDDParTravLine.dealInfos[tline.bdnum].pbnDeal.getCardSet(tline.getLeaderIndex(), suit)
                 cardStr = 'any' if holdingSet == handSet else holdingStr
-                str += f'{suit}:{cardStr} '
+                suitSym = self.subSuitSym(suit)
+                optStr += f'{suitSym}:{cardStr} '
+                totalOpts += len(holdingStr)
                 
-        return str
+        return 'any card' if totalOpts >= 13 else optStr
 
     @staticmethod
     def getSuitChr(idx):
