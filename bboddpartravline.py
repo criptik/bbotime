@@ -167,14 +167,7 @@ class BboDDParTravLine(BboTravLineBase):
     
     # inner class DealInfo
     class DealInfo(object):
-        SuitSyms = {
-                'S' : '\N{BLACK SPADE SUIT}',
-                'H' : '\N{WHITE HEART SUIT}',
-                'D' : '\N{WHITE DIAMOND SUIT}',
-                'C' : '\N{BLACK CLUB SUIT}',
-            }
         Testing = False
-        useSuitSym = True
 
         def __init__(self, bdnum, pbnDeal):
             pbnDealString = pbnDeal.toPbnString()
@@ -190,7 +183,6 @@ class BboDDParTravLine(BboTravLineBase):
             # other fields left for later computation
             self.ddTable = None
             self.parResults = None
-            
 
         def getDDTable(self):
             if self.ddTable is None:
@@ -221,8 +213,7 @@ class BboDDParTravLine(BboTravLineBase):
                 title = f'Board:{self.bdnum}    Vul:{self.getVulStr()}   Dlr:{self.getDealerStr()}'
                 # call helper function with no title
                 handStr = functions.getHandStringPBN(None, self.DDdealsPBN.deals[0].cards)
-                for suit in self.SuitSyms.keys():
-                    handStr = re.sub(f'{suit} ', f'{self.SuitSyms[suit]} ', handStr)
+                handStr = BboBase.subSuitSym(handStr)
                 print(title)
                 print(handStr)
 
@@ -246,7 +237,7 @@ class BboDDParTravLine(BboTravLineBase):
             tabList = [['' for i in range(cols)] for j in range(rows)]             
             # first is header row of suit names
             for (sidx, suit) in enumerate(suits):
-                tabList[0][1 + sidx] = self.SuitSyms[suit] if self.useSuitSym and suit != 'NT' else suit
+                tabList[0][1 + sidx] = BboBase.subSuitSym(suit)
             # then one row for each direction
             for (didx, dir) in enumerate(dirs):
                 tabList[1+didx][0] = dir
@@ -308,7 +299,13 @@ class BboDDParTravLine(BboTravLineBase):
             pcontents = ctypes.pointer(self.parResults).contents
             txt = f'NS {pcontents.score:+}'
             for i in range(pcontents.number):
-                txt += f', {pcontents.contracts[i].value.decode("utf-8")}'
+                contract = pcontents.contracts[i].value.decode("utf-8")
+                cparts = contract.split('-')
+                # only the first part contains a suit
+                cparts[0] = BboBase.subSuitSym(cparts[0])
+                # re-assemble
+                contract = '-'.join(cparts)
+                txt += f', {contract}'
             return txt
             
         def printParClassic(self):

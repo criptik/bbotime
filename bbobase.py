@@ -9,6 +9,7 @@ from pprint import pprint
 import sys
 from bborobotfix import BboRobotFixer
 
+
 class BboBase(object):
 
     def __init__(self):
@@ -28,6 +29,21 @@ class BboBase(object):
     # to be overridden
     def childGenReport(self):
         pass
+
+    @classmethod
+    def subSuitSym(cls, str):
+        useSuitSym = True
+        if useSuitSym:
+            suitSyms =  {
+                'S' : '\N{BLACK SPADE SUIT}',
+                'H' : '\N{WHITE HEART SUIT}',
+                'D' : '\N{WHITE DIAMOND SUIT}',
+                'C' : '\N{BLACK CLUB SUIT}',
+            }
+            
+            for suit in suitSyms.keys():
+                str = re.sub(f'{suit}', f'{suitSyms[suit]}', str)
+        return str
     
     # this routine reads the html file for one traveller and uses BeautifulSoup
     # to return an array of rows, each a dict for a single row of the html file

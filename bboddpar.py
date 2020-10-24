@@ -22,6 +22,7 @@ from bboddpartravline import BboDDParTravLine
 def nested_dict():
     return collections.defaultdict(nested_dict)
 
+
 class BboDDParReporter(BboBase):
     def appDescription(self):
         return 'BBO Tourney Double Dummy Par Analysis'
@@ -50,13 +51,6 @@ class BboDDParReporter(BboBase):
                 self.showOptimumLeadsAllContracts(bdnum)
                 print()
 
-    @staticmethod
-    def subSuitSym(str):
-        suitSyms = BboDDParTravLine.DealInfo.SuitSyms
-        for suit in suitSyms.keys():
-            str = re.sub(f'{suit}', f'{suitSyms[suit]}', str)
-        return str
-    
     def showOptimumLeadsAllContracts(self, bdnum):
         print('Optimum Leads for Bid Contracts')
         print('-------------------------------')
