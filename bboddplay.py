@@ -49,6 +49,7 @@ class BboDDParReporter(BboBase):
                         print(bdnum, tline.playerDir, tline.playCount, tline.playString, tline.claimed)
                     print(f'Board {bdnum}, {tline.north} vs {tline.east}, {tline.contract} by {tline.decl}')
                     tline.getPlayAnalysis()
+                    tline.formatPlayAnalysis()
                     print(f'Tricks Actually Taken: {tline.tricks}')
                     print()
                 print()

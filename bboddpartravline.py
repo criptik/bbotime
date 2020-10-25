@@ -28,6 +28,7 @@ class BboDDParTravLine(BboTravLineBase):
         if BboDDParTravLine.dealInfos.get(bdnum) is None:
             BboDDParTravLine.dealInfos[bdnum] = self.DealInfo(self.bdnum, self.linToPbnDeal())
         (self.playString, self.claimed) = self.linToPbnPlayString()
+        # print(self.playString)
         self.playCount = int(len(self.playString)/2)
         
     def linToPbnDeal(self):
@@ -116,18 +117,19 @@ class BboDDParTravLine(BboTravLineBase):
             DDplayPBN,
             ctypes.pointer(solved),
             threadIndex)
+        self.solvedPlayContents = ctypes.pointer(solved).contents
 
+    def formatPlayAnalysis(self):
         # functions.PrintPBNPlay(ctypes.pointer(DDplayPBN), ctypes.pointer(solved))
-        psolved = ctypes.pointer(solved)
-        pplayp = ctypes.pointer(DDplayPBN)
-        print(f'DD Expected Tricks: {psolved.contents.tricks[0]}')
-        for i in range(1, psolved.contents.number):
+        print(f'DD Expected Tricks: {self.solvedPlayContents.tricks[0]}')
+        for i in range(1, self.solvedPlayContents.number):
             sep = '|' if i % 4 == 0 else ' '
-            print(f'{chr(pplayp.contents.cards[2 * (i - 1)])}{chr(pplayp.contents.cards[2 * i - 1])}{sep}', end='')
+            psidx = 2*(i-1)
+            print(f'{self.playString[psidx : psidx+2]}{sep}', end='')
         print()
         lasttrix = -1
-        for i in range(1, psolved.contents.number):
-            trix = psolved.contents.tricks[i]
+        for i in range(1, self.solvedPlayContents.number):
+            trix = self.solvedPlayContents.tricks[i]
             trixStr = '  ' if trix == lasttrix else f'{trix:2}'
             print(f'{trixStr} ', end='')
             lasttrix = trix
