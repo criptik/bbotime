@@ -51,9 +51,10 @@ class BboDDParTravLine(BboTravLineBase):
 
         # build hands structure to create Deal
         # the created Deal will fill in the missing 4th hand
-        hands = []
-        for handstr in str3Hands:
-            hands.append(self.Deal.Hand.fromPbnHandStr(handstr))
+        # the three hands from str3Hands are always in order S, W, N (E missing)
+        hands = {}
+        for i in range(3):
+            hands['SWN'[i]] = self.Deal.Hand.fromPbnHandStr(str3Hands[i])
         mydeal = self.Deal(hands)
         return mydeal
     
@@ -342,21 +343,22 @@ class BboDDParTravLine(BboTravLineBase):
         def __init__(self, hands):
             self.hands = hands
             if len(hands) == 3:
-                # fill in missing hand
+                # fill in missing hand (from BBO generally E)
+                missDir = (set('NSEW') - set(self.hands.keys())).pop()
                 missHand = self.Hand.allCards()
+                for hand in self.hands.values():
+                    for i in range(len(hand.suits)):
+                        missHand.suits[i] -= hand.suits[i]
+                self.hands[missDir] = missHand
 
-                for hand in self.hands:
-                    for (i, suitset) in enumerate(hand.suits):
-                        missHand.suits[i] = missHand.suits[i] - suitset
-
-                self.hands.append(missHand)
-
+        def handOrder(self):
+            return 'SWNE'
+        
         def toPbnString(self):
             result = 'S:'  # BBO deals always start with 'S'
-            for (i, hand) in enumerate(self.hands):
-                if i != 0:
-                    result = result + ' '
-                result = result + hand.toPbnString()
+            for dir in self.handOrder():
+                sep = ' ' if dir != 'S' else ''
+                result += sep + self.hands[dir].toPbnString()
             return result
 
         def getSuitIdx(self, suit):
@@ -364,21 +366,19 @@ class BboDDParTravLine(BboTravLineBase):
             
         def getCardSet(self, playerIdx, suit):
             # in dds, player indices are N=0, E=1, S=2, W=3
-            # but in our hand, the suits are always in order S, W, N, E
-            handIdx = (playerIdx + 2) % 4
+            dir = 'NESW'[playerIdx]
             # within a hand, suits are always S, H, D, C
             suitIdx = self.getSuitIdx(suit)
-            return self.hands[handIdx].suits[suitIdx]
+            return self.hands[dir].suits[suitIdx]
 
         def playerHoldingCard(self, suit, rank):
             # suit and rank are both strings
-            for (i, hand) in enumerate(self.hands):
-                suitIdx = self.getSuitIdx(suit)
-                if rank in hand.suits[suitIdx]:
-                    handIdx = i
-                    break
-            player = 'SWNE'[handIdx]
-            return player
+            suitIdx = self.getSuitIdx(suit)
+            for dir in self.hands.keys():
+                if rank in self.hands[dir].suits[suitIdx]:
+                    return dir
+            # if we got this far, we didn't find it
+            return None
                     
         # inner class Deal.Hand
         class Hand(object):
