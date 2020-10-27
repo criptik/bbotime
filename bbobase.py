@@ -52,7 +52,11 @@ class BboBase(object):
         fname1 = f'{self.args.dir}/hands ({n}).html'
         fname2 = f'{self.args.dir}/T{n}.html'
         fname = fname1 if os.path.isfile(fname1) else fname2
-        file = open(fname)
+        try:
+            file = open(fname)
+        except Exception as ex:
+            print(f'Error: cannot find {fname1} or {fname2}', file=sys.stderr)
+            sys.exit(1)
         html_doc = file.read()
 
         if self.args.debug:
@@ -104,11 +108,7 @@ class BboBase(object):
         for bdnum in range(1, self.args.boards+1):
             table_data = self.parseFile(bdnum)
             for row in table_data:
-                if False:
-                    obj = self.createObject(bdnum, row)
-                    travTableData[bdnum].append(obj)
-                else:
-                    travTableData[bdnum].append(row)                    
+                travTableData[bdnum].append(row)                    
 
         # if robotScores are supplied, use that to try to differentiate between two robot pairs
         if self.args.robotScores is not None:
@@ -129,7 +129,9 @@ class BboBase(object):
         parser.add_argument('--boards', type=int, default=None, help='total number of boards')
         parser.add_argument('--bpr', type=int, default=None, help='boards per round')
         parser.add_argument('--dir',  help='directory containing traveler html records')
-        parser.add_argument('--robotScores', type=float, nargs='*', default=None, help='supply robot scores to help differentiate between robots which all have the same name') 
+        parser.add_argument('--robotScores', type=float, nargs='*', default=None, help='supply robot scores to help differentiate between robots which all have the same name')
+        parser.add_argument('--tablefmt', default='pretty', help='tabulate table format')
+        parser.add_argument('--names', nargs="+")
         parser.add_argument('--debug', default=False, action='store_true', help='print some debug info') 
 
         # allow child to add args
@@ -240,11 +242,26 @@ class BboTravLineBase(object):
             return name
         else:
             # this will return the original partner in this pair
-            return self.origPartners[pard]
+            # and if doesn't exist in dict, just return name
+            return self.origPartners.get(pard, name)  
 
     # convert time string in traveller to an integer num of secs
     def readTime(self, str):
         return time.mktime(time.strptime(str, '%Y-%m-%d %H:%M'))
+
+    def hasPlayer(self, name):
+        return name in self.playerDir
+
+    def checkAndAppend(self, travellers):
+        if self.args.names is not None:
+            nameMatch = False
+            for name in self.args.names:
+                if self.hasPlayer(name):
+                    nameMatch = True
+            if not nameMatch:
+                return #without appending
+        travellers[self.bdnum].append(self)
+        
 
 class Bucket(object):
     def __init__(self):

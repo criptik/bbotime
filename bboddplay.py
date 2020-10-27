@@ -21,7 +21,7 @@ from bboddpartravline import BboDDParTravLine
 def nested_dict():
     return collections.defaultdict(nested_dict)
 
-class BboDDParReporter(BboBase):
+class BboDDPlayReporter(BboBase):
     def appDescription(self):
         return 'BBO Tourney Double Dummy Play Analysis'
 
@@ -36,26 +36,25 @@ class BboDDParReporter(BboBase):
             travellers[bdnum] = []
             for row in self.travTableData[bdnum]:
                 tline = BboDDParTravLine(bdnum, row)
-                # tline.getDDTable()
-                travellers[bdnum].append(tline)
+                tline.checkAndAppend(travellers)
         # print('travTableData and travellers are set up')
 
-        # hand, ddtable and par display
-        if True:
-            for bdnum in range (1, self.args.boards + 1):
-                BboDDParTravLine.dealInfos[bdnum].printHand()
-                for tline in travellers[bdnum]:
-                    if self.args.debug:
-                        print(bdnum, tline.playerDir, tline.playCount, tline.playString, tline.claimed)
-                    print(f'Board {bdnum}, {tline.north} vs {tline.east}, {tline.contract} by {tline.decl}')
-                    tline.getPlayAnalysis()
-                    tline.formatPlayAnalysis()
-                    print(f'Tricks Actually Taken: {tline.tricks}')
-                    print()
+        print('<html><body><pre>')
+        for bdnum in range (1, self.args.boards + 1):
+            BboDDParTravLine.dealInfos[bdnum].printHand()
+            for tline in travellers[bdnum]:
+                if self.args.debug:
+                    print(bdnum, tline.playerDir, tline.playCount, tline.playString, tline.claimed)
+                print(f'Board {bdnum}, NS:{tline.north}-{tline.south} vs EW:{tline.east}-{tline.west}, {tline.contract} by {tline.decl}')
+                tline.getPlayAnalysis()
+                tline.formatPlayAnalysis()
+                print(f'Tricks Actually Taken: {tline.tricks}')
                 print()
+            print()
+        print('</pre></body></html>')
                 
 
 
 #-------- main stuff starts here -----------
 
-BboDDParReporter().genReport()
+BboDDPlayReporter().genReport()

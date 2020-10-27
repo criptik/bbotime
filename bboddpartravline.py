@@ -122,21 +122,39 @@ class BboDDParTravLine(BboTravLineBase):
     def formatPlayAnalysis(self):
         # functions.PrintPBNPlay(ctypes.pointer(DDplayPBN), ctypes.pointer(solved))
         print(f'DD Expected Tricks: {self.solvedPlayContents.tricks[0]}')
+        numPlays = self.solvedPlayContents.number
+        rows = ((numPlays+3)//4 * 4) // 4
+        cols = 4 + 1
+        tab = [['' for i in range(cols)] for j in range(rows)]
         for i in range(1, self.solvedPlayContents.number):
-            sep = '|' if i % 4 == 0 else ' '
             psidx = 2*(i-1)
-            print(f'{self.playString[psidx : psidx+2]}{sep}', end='')
-        print()
-        lasttrix = -1
+            (cellSuit, cellRank) = self.playString[psidx : psidx+2]
+            r = (i-1)//4
+            c = (i-1)%4 + 1
+            tab[r][c] = f'{cellSuit}{cellRank}'
+            # add leader if this is first card of trick
+            if c == 1:
+                tab[r][0] = f'{self.dealInfos[self.bdnum].pbnDeal.playerHoldingCard(cellSuit, cellRank)} '
+        tableHtml = tabulate.tabulate(tab, tablefmt='html')
+        # now go thru and adjust the ones that involve trick count changes
+        lasttrix = self.solvedPlayContents.tricks[0]
         for i in range(1, self.solvedPlayContents.number):
+            psidx = 2*(i-1)
+            cellCard = self.playString[psidx : psidx+2]
+            if False:
+                modCellCard = BboBase.subSuitSym(cellCard)
+            else:
+                modCellCard = cellCard
             trix = self.solvedPlayContents.tricks[i]
-            trixStr = '  ' if trix == lasttrix else f'{trix:2}'
-            print(f'{trixStr} ', end='')
-            lasttrix = trix
-        print()
-        
-        # sys.exit(1)
-        # DDPlayPBN 
+            if trix != lasttrix:
+                bgcolor = 'pink' if trix > lasttrix else 'cyan'
+                tableHtml = re.sub(f'<td>{cellCard}</td>', f'<td><span style="background-color:{bgcolor}">{modCellCard}<sub> {trix:2}</sub></td>', tableHtml)
+                lasttrix = trix
+            else:
+                tableHtml = re.sub(f'<td>{cellCard}</td>', f'<td>{modCellCard}<sub>&nbsp;&nbsp</sub></td>', tableHtml)
+        # finally fix up the leader column
+        tableHtml = re.sub(f'<tr><td>([NESW])</td>', f'<tr><td>\\1&nbsp;&nbsp</sub></td>', tableHtml)
+        print(tableHtml, end='')
 
     def getOptimumLeads(self):
         dlPBN = dds.dealPBN()
@@ -341,14 +359,27 @@ class BboDDParTravLine(BboTravLineBase):
                 result = result + hand.toPbnString()
             return result
 
+        def getSuitIdx(self, suit):
+            return 'SHDC'.index(suit)
+            
         def getCardSet(self, playerIdx, suit):
             # in dds, player indices are N=0, E=1, S=2, W=3
             # but in our hand, the suits are always in order S, W, N, E
             handIdx = (playerIdx + 2) % 4
             # within a hand, suits are always S, H, D, C
-            suitIdx = 'SHDC'.index(suit)
+            suitIdx = self.getSuitIdx(suit)
             return self.hands[handIdx].suits[suitIdx]
-            
+
+        def playerHoldingCard(self, suit, rank):
+            # suit and rank are both strings
+            for (i, hand) in enumerate(self.hands):
+                suitIdx = self.getSuitIdx(suit)
+                if rank in hand.suits[suitIdx]:
+                    handIdx = i
+                    break
+            player = 'SWNE'[handIdx]
+            return player
+                    
         # inner class Deal.Hand
         class Hand(object):
             def __init__(self):

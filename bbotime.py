@@ -36,7 +36,6 @@ class BboTimeReporter(BboBase):
         parser.add_argument('--tstart',  default=None, help='tournament start date/time')
         parser.add_argument('--simclocked', default=False, action='store_true', help='afterwards simulate as if clocked had been used')
         parser.add_argument('--rowsPerPlayer', default=1, type=int, help='rows per player in table')
-        parser.add_argument('--tablefmt', default='pretty', help='tabulate table format')
         parser.add_argument('--minsPerBoard', default=6, type=int, help='minutes allowed per board (for simclocked)')
 
     def childGenReport(self):
