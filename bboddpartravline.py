@@ -127,36 +127,44 @@ class BboDDParTravLine(BboTravLineBase):
         rows = ((numPlays+3)//4 * 4) // 4
         cols = 4 + 1
         tab = [['' for i in range(cols)] for j in range(rows)]
-        for i in range(1, self.solvedPlayContents.number):
-            psidx = 2*(i-1)
-            (cellSuit, cellRank) = self.playString[psidx : psidx+2]
-            r = (i-1)//4
-            c = (i-1)%4 + 1
-            tab[r][c] = f'{cellSuit}{cellRank}'
-            # add leader if this is first card of trick
-            if c == 1:
-                tab[r][0] = f'{self.dealInfos[self.bdnum].pbnDeal.playerHoldingCard(cellSuit, cellRank)} '
-        tableHtml = tabulate.tabulate(tab, tablefmt='html')
+        # in addition to showing cards played, we also
+        # now go thru and adjust the ones that involve trick count changes
         # now go thru and adjust the ones that involve trick count changes
         lasttrix = self.solvedPlayContents.tricks[0]
         for i in range(1, self.solvedPlayContents.number):
             psidx = 2*(i-1)
+            r = (i-1)//4
+            c = (i-1)%4 + 1
             cellCard = self.playString[psidx : psidx+2]
-            if False:
-                modCellCard = BboBase.subSuitSym(cellCard)
-            else:
-                modCellCard = cellCard
             trix = self.solvedPlayContents.tricks[i]
             if trix != lasttrix:
                 bgcolor = 'pink' if trix > lasttrix else 'cyan'
-                tableHtml = re.sub(f'<td>{cellCard}</td>', f'<td><span style="background-color:{bgcolor}">{modCellCard}<sub> {trix:2}</sub></td>', tableHtml)
+                tab[r][c] = f'<span style="background-color:{bgcolor}">{cellCard}<sub> {trix:2}</sub>'
                 lasttrix = trix
             else:
-                tableHtml = re.sub(f'<td>{cellCard}</td>', f'<td>{modCellCard}<sub>&nbsp;&nbsp</sub></td>', tableHtml)
-        # finally fix up the leader column
-        tableHtml = re.sub(f'<tr><td>([NESW])</td>', f'<tr><td>\\1&nbsp;&nbsp</sub></td>', tableHtml)
+                tab[r][c] = f'{cellCard}<sub>&nbsp;&nbsp</sub>'
+            # add leader in first column if this is first card of trick
+            if c == 1:
+                (cellSuit, cellRank) = cellCard
+                leader = self.dealInfos[self.bdnum].pbnDeal.playerHoldingCard(cellSuit, cellRank)
+                tab[r][0] = f'{leader}&nbsp;&nbsp'
+        # set this false if using some older version of tabulate which doesn't support unsafehtml tablefmt
+        if not self.args.avoidUnsafeHtml:
+            tableHtml = tabulate.tabulate(tab, tablefmt='unsafehtml')
+        else:
+            # if unsafeHtml doesn't work we have to use html and unescape a bunch of stuff
+            tableHtml = tabulate.tabulate(tab, tablefmt='html')
+            tableHtml = self.unescapeInnerHtml(tableHtml)
         print(tableHtml, end='')
 
+    def unescapeInnerHtml(self, str):
+        str = re.sub('&lt;', '<', str)
+        str = re.sub('&gt;', '>', str)
+        str = re.sub('&quot;', '"', str)
+        str = re.sub('&amp;', '&', str)
+        str = re.sub('&#x27;', "'", str)
+        return str
+        
     def getOptimumLeads(self):
         dlPBN = dds.dealPBN()
         fut2 = dds.futureTricks()

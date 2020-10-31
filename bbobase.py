@@ -131,7 +131,8 @@ class BboBase(object):
         parser.add_argument('--dir',  help='directory containing traveler html records')
         parser.add_argument('--robotScores', type=float, nargs='*', default=None, help='supply robot scores to help differentiate between robots which all have the same name')
         parser.add_argument('--tablefmt', default='pretty', help='tabulate table format')
-        parser.add_argument('--names', nargs="+")
+        parser.add_argument('--names', nargs="+", help='restrict to travellers with these names')
+        parser.add_argument('--avoidUnsafeHtml', default=False, action='store_true', help='set if tabulate unsafehtml tablefmt does not work') 
         parser.add_argument('--debug', default=False, action='store_true', help='print some debug info') 
 
         # allow child to add args
