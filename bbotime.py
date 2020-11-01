@@ -128,7 +128,7 @@ class BboTimeReporter(BboBase):
 
 
     def addToMaps(self, bdnum, row):
-        tline = BboTimeTravLine(bdnum, row)
+        tline = BboTimeTravLine(bdnum, row, self.travParser)
         map[bdnum][tline.origNorth] = tline
         map[bdnum][tline.origEast] = tline
         players[tline.origNorth] = 1
@@ -200,8 +200,9 @@ class BboTimeReporter(BboBase):
 
 
 class BboTimeTravLine(BboTravLineBase):
-    def __init__(self, bdnum, row):
-        super(BboTimeTravLine, self).__init__(bdnum, row)
+    def __init__(self, bdnum, row, travParser):
+        super(BboTimeTravLine, self).__init__(bdnum, row, travParser)
+        self.iEndTime = self.readTime(self.row['Time'])
         self.waitEndTime = self.iEndTime  # for end of round records this will be adjusted later
         self.clockedTruncation = False
         

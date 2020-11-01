@@ -4,6 +4,8 @@ import os
 import re
 import time
 import argparse
+from abc import ABC, abstractmethod
+import csv
 
 from pprint import pprint
 import sys
@@ -45,58 +47,6 @@ class BboBase(object):
                 str = re.sub(f'{suit}', f'{suitSyms[suit]}', str)
         return str
     
-    # this routine reads the html file for one traveller and uses BeautifulSoup
-    # to return an array of rows, each a dict for a single row of the html file
-    def parseFile(self, n):
-        # two different naming options supported
-        fname1 = f'{self.args.dir}/hands ({n}).html'
-        fname2 = f'{self.args.dir}/T{n}.html'
-        fname = fname1 if os.path.isfile(fname1) else fname2
-        try:
-            file = open(fname)
-        except Exception as ex:
-            print(f'Error: cannot find {fname1} or {fname2}', file=sys.stderr)
-            sys.exit(1)
-        html_doc = file.read()
-
-        if self.args.debug:
-            print(f'---- Handling Traveller File {fname} for Board {n} ----')
-
-
-        soup = BeautifulSoup(html_doc, 'html.parser')
-
-        # print(soup.prettify())
-        # print(soup.find_all('a')[1]['href'])
-
-
-        fields = []
-        table_data = []
-        rows = soup.table.find_all('tr')
-        # get rid of rows[0]
-        r0 = rows.pop(0)
-        if False:
-            print(r0)
-            print('--------- Rest of Rows -----------')
-            print(rows)
-
-        for tr in rows:
-            #build fields array
-            for th in tr.find_all('th', recursive=True):
-                fields.append(th.text)
-        for tr in rows:
-            datum = {}
-            for i, td in enumerate(tr.find_all('td', recursive=True)):
-                # skip some useless fields
-                if fields[i] not in ['N\u00ba', 'Movie']:
-                    datum[fields[i]] = td.text
-                #special case for Movie element (lin info encoded in onclick)
-                if fields[i] == 'Movie':
-                    datum['LinStr'] = td.find('a').attrs['onclick']
-            if datum:
-                table_data.append(datum)
-
-        # print(json.dumps(table_data, indent=4))
-        return table_data
 
     # builds and returns an array of traveler line objects, one for each row of each board number
     def readAllTravFiles(self):
@@ -104,20 +54,26 @@ class BboBase(object):
         # init, array for each bdnum
         for bdnum in range(1, self.args.boards+1):
             travTableData[bdnum] = []
-
-        for bdnum in range(1, self.args.boards+1):
-            table_data = self.parseFile(bdnum)
-            for row in table_data:
-                travTableData[bdnum].append(row)                    
-
+        self.travParser = self.determineTravParser()
+        self.travParser.doParsing(travTableData)
+        
         # if robotScores are supplied, use that to try to differentiate between two robot pairs
         if self.args.robotScores is not None:
             BboRobotFixer(self.args, travTableData).robotFix()
 
         return travTableData
 
-    def createObject(self, bdnum, row):
-        return BboTravLineBase(self.args, bdnum, row)
+    def determineTravParser(self):
+        # for now, look in args.dir for file types
+        for f in os.listdir(self.args.dir):
+            if f.endswith('.html'):
+                return TravParserHtml(self.args)
+            elif f.endswith('.csv'):
+                return TravParserCsv(self.args)
+        return None
+        
+    def createObject(self, bdnum, row, travParser):
+        return BboTravLineBase(self.args, bdnum, row, travParser)
 
     def appDescription(self):
         return 'BBO Base'
@@ -168,8 +124,11 @@ class BboTravLineBase(object):
         cls.args = args
 
     origPartners = {}   # class variable
-    def __init__(self, bdnum, row):
+    def __init__(self, bdnum, row, travParser):
         self.bdnum = bdnum
+        self.travParser = travParser
+        # row fields mostly handled here but saved in case needed later
+        self.row = row  
         self.north = n = self.nameForDirection(row, 'North')
         self.south = s = self.nameForDirection(row, 'South')
         self.east  = e = self.nameForDirection(row, 'East')
@@ -188,9 +147,8 @@ class BboTravLineBase(object):
             self.nsPoints = int(row['NS Points'])
         except:
             self.nsPoints = None
-        self.nsScore  = float(row['Score'].rstrip('%'))
-        self.iEndTime = self.readTime(row['Time'])
-        self.linStr = row['LinStr']
+        self.nsScore  = float(self.travParser.getMPPct(row).rstrip('%'))
+        self.linStr = self.travParser.getLinStr(row)
         # parse different parts of result
         resstr = row['Result']
         resstr = re.sub(r'\<.*?\>', '', resstr)
@@ -216,7 +174,8 @@ class BboTravLineBase(object):
                        '\N{BLACK DIAMOND SUIT}' :  'D',
                        '\N{BLACK CLUB SUIT}' :  'C',
                        'N'       :  'N' }
-            suitstr = suitmap[suitstr]
+            if suitstr in suitmap.keys():
+                suitstr = suitmap[suitstr]
             self.trumpstr = suitstr
             self.contract = f'{level}{suitstr}'
             self.dblstr = dblstr
@@ -285,3 +244,151 @@ class Bucket(object):
         print(f'{displayName:<35} {self.count()}')
 
 
+class TravParserBase(ABC):
+    def __init__(self, args):
+        self.args = args
+        self.initParser()
+
+    @abstractmethod
+    def initParser(self):
+        pass
+
+    @abstractmethod
+    def doParsing(self, travTableData):
+        pass
+
+    @abstractmethod
+    def getLinStr(self, row):
+        pass
+
+    @abstractmethod
+    def getMPPct(self, row):
+        pass
+
+    def removePercentSyms(self, s):
+        # subsitute % symbols
+        s = re.sub('%7C', '|', s)
+        s = re.sub('%2C', ' ', s)
+        return s
+        
+# class to read the html files as pulled over by BBO-2-Brian Helper
+class TravParserHtml(TravParserBase):
+    def initParser(self):
+        pass
+    
+    def doParsing(self, travTableData):
+        for bdnum in range(1, self.args.boards+1):
+            table_data = self.parseOneFile(bdnum)
+            for row in table_data:
+                travTableData[bdnum].append(row)                    
+
+    def getLinStr(self, row):
+        s = row['LinStr']
+        s = self.removePercentSyms(s)
+        # everything before pn goes
+        s = re.sub('^.*?pn\|', '|pn|', s)
+        # get rid of single quotes
+        s = re.sub("'", "", s)
+        # get rid of end
+        s = re.sub('\);this.*?$', '', s)
+        return s
+    
+    def getMPPct(self, row):
+        return row['Score']
+    
+    # this routine reads the html file for one traveller and uses BeautifulSoup
+    # to return an array of rows, each a dict for a single row of the html file
+    def parseOneFile(self, n):
+        # two different naming options supported
+        fname1 = f'{self.args.dir}/hands ({n}).html'
+        fname2 = f'{self.args.dir}/T{n}.html'
+        fname = fname1 if os.path.isfile(fname1) else fname2
+        try:
+            file = open(fname)
+        except Exception as ex:
+            print(f'Error: cannot find {fname1} or {fname2}', file=sys.stderr)
+            sys.exit(1)
+        html_doc = file.read()
+
+        if self.args.debug:
+            print(f'---- Handling Traveller File {fname} for Board {n} ----')
+
+
+        soup = BeautifulSoup(html_doc, 'html.parser')
+
+        fields = []
+        table_data = []
+        rows = soup.table.find_all('tr')
+        # get rid of rows[0]
+        r0 = rows.pop(0)
+        if False:
+            print(r0)
+            print('--------- Rest of Rows -----------')
+            print(rows)
+
+        for tr in rows:
+            #build fields array
+            for th in tr.find_all('th', recursive=True):
+                fields.append(th.text)
+        for tr in rows:
+            datum = {}
+            for i, td in enumerate(tr.find_all('td', recursive=True)):
+                # skip some useless fields
+                if fields[i] not in ['N\u00ba', 'Movie']:
+                    datum[fields[i]] = td.text
+                #special case for Movie element (lin info encoded in onclick)
+                if fields[i] == 'Movie':
+                    datum['LinStr'] = td.find('a').attrs['onclick']
+            if datum:
+                table_data.append(datum)
+
+        # print(json.dumps(table_data, indent=4))
+        return table_data
+
+# class to read the csv file as created by BBO Extractor
+class TravParserCsv(TravParserBase):
+    def initParser(self):
+        pass
+
+    def getLinStr(self, row):
+        s = row['playdata']
+        return self.removePercentSyms(s)
+
+    def getMPPct(self, row):
+        return row['Percent']
+    
+    def doParsing(self, travTableData):
+        fname = None
+        for f in os.listdir(self.args.dir):
+            if f.endswith('.csv'):
+                fname = f
+                break
+            
+        with open(f'{self.args.dir}/{fname}', 'r') as read_obj:
+            found = False
+            travlines = []
+            while True:
+                line = next(read_obj).rstrip()
+                if found:
+                    travlines.append(line.lstrip('#'))
+                if line == '#TravellerLines':
+                    # print('start appending next line')
+                    found = True
+                if found and (line == '' or line == '#Substitutions'):
+                    # print('stop appending')
+                    break
+
+        # now travlines can be read by csvreader
+        csv_reader = csv.DictReader(travlines)
+        # Iterate over each row after the header in the csv
+        for row in csv_reader:
+            # row variable is a dict that represents a row in csv
+            # pprint(row)
+            bdnum = int(row['Board'])
+            if bdnum > self.args.boards:
+                break
+            else:
+                row['Time'] = None  #kludge
+                travTableData[bdnum].append(row)
+            
+        

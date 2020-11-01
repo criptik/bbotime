@@ -42,7 +42,7 @@ class BboDefOffReporter(BboBase):
         BboDefOffTravLine.importArgs(self.args)
         for bdnum in range (1, self.args.boards + 1):
             for row in self.travTableData[bdnum]:
-                tline = BboDefOffTravLine(bdnum, row)
+                tline = BboDefOffTravLine(bdnum, row, self.travParser)
                 # print(f'bdnum={bdnum}')
                 # pprint(tline.__dict__)
                 # for now, we really only need North and East
@@ -113,8 +113,8 @@ class BboDefOffReporter(BboBase):
             
         
 class BboDefOffTravLine(BboTravLineBase):
-    def __init__(self, bdnum, row):
-        super(BboDefOffTravLine, self).__init__(bdnum, row)
+    def __init__(self, bdnum, row, travParser):
+        super(BboDefOffTravLine, self).__init__(bdnum, row, travParser)
         # nothing added here
 
 #-------- main stuff starts here -----------

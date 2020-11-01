@@ -22,20 +22,17 @@ class BboDDParTravLine(BboTravLineBase):
     # class data of DealInfo objects keyed by bdnum
     dealInfos = {}
 
-    def __init__(self, bdnum, row):
-        super(BboDDParTravLine, self).__init__(bdnum, row)
+    def __init__(self, bdnum, row, travParser):
+        super(BboDDParTravLine, self).__init__(bdnum, row, travParser)
         # convert the captured LIN string into a pbn deal specification
         if BboDDParTravLine.dealInfos.get(bdnum) is None:
             BboDDParTravLine.dealInfos[bdnum] = self.DealInfo(self.bdnum, self.linToPbnDeal())
         (self.playString, self.claimed) = self.linToPbnPlayString()
-        # print(self.playString)
+        # print(f'bdnum {bdnum}, playstring={self.playString}')
         self.playCount = int(len(self.playString)/2)
         
     def linToPbnDeal(self):
         s = self.linStr
-        # subsitute % symbols
-        s = re.sub('%7C', '|', s)
-        s = re.sub('%2C', ' ', s)
         # print(s)
         # get rid of everything up to deal info
         s = re.sub('^.*md\|\d', '', s)
@@ -60,21 +57,19 @@ class BboDDParTravLine(BboTravLineBase):
     
     def linToPbnPlayString(self):
         s = self.linStr
-        # subsitute % symbols
-        s = re.sub('%7C', '|', s)
-        s = re.sub('%2C', ' ', s)
         # get rid of everything up to play info
         s = re.sub('^.*?pc\|', '|pc|', s)
-        # and everything after
-        s = re.sub("\|'\);this.*$", '', s)
         # strip down to only the cards played (get rid of |pc|)
         s = re.sub('\|pc\|', '', s)
+        # get rid of any zz and following records at the end
+        s = re.sub('\|zz\|.*?$', '', s)
         # string returned could have claim info at end, if so break that out
         splits = re.split('\|mc\|', s)
         if len(splits) == 1:
             splits.append(None)   # no claim info
         else:
-            splits[1] = int(splits[1])  # amount claimed
+            barsplits = splits[1].split('|')
+            splits[1] = int(barsplits[0])  # amount claimed
         return splits
         
     def getDDTable(self):
@@ -110,7 +105,9 @@ class BboDDParTravLine(BboTravLineBase):
         self.buildDealPBN(dlPBN)
         # print(dlPBN.trump,  dlPBN.first, dlPBN.remainCards)
         DDplayPBN.number = self.playCount
-        DDplayPBN.cards = self.playString.encode('utf=8')
+        if self.args.debug:
+            print('playstring len is ', len(self.playString), self.playString)
+        DDplayPBN.cards = self.playString.encode('utf-8')
         # print(DDplayPBN.number, DDplayPBN.cards)
         threadIndex = 0
         res = dds.AnalysePlayPBN(

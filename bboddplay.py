@@ -35,7 +35,7 @@ class BboDDPlayReporter(BboBase):
         for bdnum in range (1, self.args.boards + 1):
             travellers[bdnum] = []
             for row in self.travTableData[bdnum]:
-                tline = BboDDParTravLine(bdnum, row)
+                tline = BboDDParTravLine(bdnum, row, self.travParser)
                 tline.checkAndAppend(travellers)
         # print('travTableData and travellers are set up')
 
