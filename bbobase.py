@@ -268,7 +268,8 @@ class TravParserBase(ABC):
     def removePercentSyms(self, s):
         # subsitute % symbols
         s = re.sub('%7C', '|', s)
-        s = re.sub('%2C', ' ', s)
+        s = re.sub('%2C', ',', s)
+        s = re.sub('%20', ' ', s)
         return s
         
 # class to read the html files as pulled over by BBO-2-Brian Helper
@@ -352,6 +353,7 @@ class TravParserCsv(TravParserBase):
 
     def getLinStr(self, row):
         s = row['playdata']
+        # print(s)
         return self.removePercentSyms(s)
 
     def getMPPct(self, row):

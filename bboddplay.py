@@ -40,6 +40,19 @@ class BboDDPlayReporter(BboBase):
         # print('travTableData and travellers are set up')
 
         print('<html><body><pre>')
+        print('''
+        <style>
+         .button {
+         background-color: white;
+         border: 2px solid black;
+	 border-radius: 8px;
+         color: black;
+         padding: 4px;
+         display: inline-block;
+	 text-decoration: none;
+         }
+        </style>
+        ''')
         for bdnum in range (1, self.args.boards + 1):
             BboDDParTravLine.dealInfos[bdnum].printHand()
             for tline in travellers[bdnum]:

@@ -36,15 +36,14 @@ class BboDDParTravLine(BboTravLineBase):
         # print(s)
         # get rid of everything up to deal info
         s = re.sub('^.*md\|\d', '', s)
-        # and everythin after
+        # and everything after
         s = re.sub('\|rh\|.*$', '', s)
         # replace suits with separators
-        s = re.sub('S', ' ', s)
+        s = re.sub('S', '', s)
         s = re.sub('[HDC]', '.', s)
         s = s.lstrip(' ')
         s = s.rstrip(' ')
-        str3Hands = s.split('  ')
-        # print(str3Hands)
+        str3Hands = s.split(',')[0:3]
 
         # build hands structure to create Deal
         # the created Deal will fill in the missing 4th hand
@@ -136,12 +135,15 @@ class BboDDParTravLine(BboTravLineBase):
         print(f'DD Expected Tricks: {self.solvedPlayContents.tricks[0]}')
         numPlays = self.solvedPlayContents.number
         rows = ((numPlays+3)//4 * 4) // 4
-        cols = 4 + 1
+        cols = 1 + 4 + 1   # 1 for leader, 4 for cards/trick, 1 for buttonx
         tab = [['' for i in range(cols)] for j in range(rows)]
         # in addition to showing cards played, we also
         # now go thru and adjust the ones that involve trick count changes
         # now go thru and adjust the ones that involve trick count changes
         lasttrix = self.solvedPlayContents.tricks[0]
+        # put in the replay it button in first row, last col
+        tab[0][-1] = f'&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://dds.bridgewebs.com/bsol2/ddummy.htm?lin=&lin={self.linStr}" target="_blank" class="button">Replay It</a>'
+        # go thru solvedPlayContents
         for i in range(1, self.solvedPlayContents.number):
             psidx = 2*(i-1)
             r = (i-1)//4
