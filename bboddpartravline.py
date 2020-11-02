@@ -25,8 +25,8 @@ class BboDDParTravLine(BboTravLineBase):
     def __init__(self, bdnum, row, travParser):
         super(BboDDParTravLine, self).__init__(bdnum, row, travParser)
         # convert the captured LIN string into a pbn deal specification
-        if BboDDParTravLine.dealInfos.get(bdnum) is None:
-            BboDDParTravLine.dealInfos[bdnum] = self.DealInfo(self.bdnum, self.linToPbnDeal())
+        if self.dealInfos.get(bdnum) is None:
+            self.dealInfos[bdnum] = self.DealInfo(self.bdnum, self.linToPbnDeal())
         (self.playString, self.claimed) = self.linToPbnPlayString()
         # print(f'bdnum {bdnum}, playstring={self.playString}')
         self.playCount = int(len(self.playString)/2)
@@ -73,7 +73,7 @@ class BboDDParTravLine(BboTravLineBase):
         return splits
         
     def getDDTable(self):
-        dealInfo = BboDDParTravLine.dealInfos[self.bdnum]
+        dealInfo = self.dealInfos[self.bdnum]
         return dealInfo.getDDTable()
 
     def getTrumpIndex(self):
@@ -90,7 +90,7 @@ class BboDDParTravLine(BboTravLineBase):
         # dlPBN.first is the index of the hand leading to the first trick
         # where N=0, E=1, S=2, W=3
         dlPBN.first = self.getLeaderIndex()
-        dealInfo = BboDDParTravLine.dealInfos[self.bdnum]
+        dealInfo = self.dealInfos[self.bdnum]
         for n in range(3):
             dlPBN.currentTrickSuit[n] = dlPBN.currentTrickRank[n] = 0
         dlPBN.remainCards = dealInfo.pbnDealString.encode('utf-8')
@@ -117,6 +117,20 @@ class BboDDParTravLine(BboTravLineBase):
             threadIndex)
         self.solvedPlayContents = ctypes.pointer(solved).contents
 
+    def declColor(self):
+        return 'cyan'
+
+    def defenderColor(self, dirLetter):
+        return 'pink' if dirLetter in 'NE' else 'orange'
+    
+    def coloredName(self, myLetter):
+        myIndex = 'NESW'.index(myLetter)
+        pardLetter = 'NESW'[(myIndex + 2) % 4]
+        myColor = self.declColor() if self.decl == myLetter else None if self.decl == pardLetter else self.defenderColor(myLetter)
+        myName = self.playerDir[myIndex]
+        myStyledName = myName if myColor is None else f'<span style="background-color:{myColor}">{myName}</span>'
+        return myStyledName
+                
     def formatPlayAnalysis(self):
         # functions.PrintPBNPlay(ctypes.pointer(DDplayPBN), ctypes.pointer(solved))
         print(f'DD Expected Tricks: {self.solvedPlayContents.tricks[0]}')
@@ -133,16 +147,22 @@ class BboDDParTravLine(BboTravLineBase):
             r = (i-1)//4
             c = (i-1)%4 + 1
             cellCard = self.playString[psidx : psidx+2]
+            (cellSuit, cellRank) = cellCard
             trix = self.solvedPlayContents.tricks[i]
-            if trix != lasttrix:
-                bgcolor = 'pink' if trix > lasttrix else 'cyan'
+            if trix == lasttrix:
+                tab[r][c] = f'{cellCard}<sub>&nbsp;&nbsp</sub>'
+            else:
+                # add some color to this cell
+                if trix < lasttrix:
+                    bgcolor = self.declColor()
+                else:
+                    # defense error, show which one based on who played the card
+                    player = self.dealInfos[self.bdnum].pbnDeal.playerHoldingCard(cellSuit, cellRank)
+                    bgcolor = self.defenderColor(player)
                 tab[r][c] = f'<span style="background-color:{bgcolor}">{cellCard}<sub> {trix:2}</sub>'
                 lasttrix = trix
-            else:
-                tab[r][c] = f'{cellCard}<sub>&nbsp;&nbsp</sub>'
             # add leader in first column if this is first card of trick
             if c == 1:
-                (cellSuit, cellRank) = cellCard
                 leader = self.dealInfos[self.bdnum].pbnDeal.playerHoldingCard(cellSuit, cellRank)
                 tab[r][0] = f'{leader}&nbsp;&nbsp'
         # set this false if using some older version of tabulate which doesn't support unsafehtml tablefmt
