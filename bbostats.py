@@ -14,7 +14,7 @@ def nested_dict():
     return collections.defaultdict(nested_dict)
 
 
-class BboDefOffReporter(BboBase):
+class BboStatsReporter(BboBase):
     def appDescription(self):
         return 'BBO Tourney Defense/Offense Analysis'
 
@@ -39,10 +39,10 @@ class BboDefOffReporter(BboBase):
         def allScore(player):
             return bucketTable[player]['All Hands'].avg()
 
-        BboDefOffTravLine.importArgs(self.args)
+        BboStatsTravLine.importArgs(self.args)
         for bdnum in range (1, self.args.boards + 1):
             for row in self.travTableData[bdnum]:
-                tline = BboDefOffTravLine(bdnum, row, self.travParser)
+                tline = BboStatsTravLine(bdnum, row, self.travParser)
                 # print(f'bdnum={bdnum}')
                 # pprint(tline.__dict__)
                 # for now, we really only need North and East
@@ -112,12 +112,12 @@ class BboDefOffReporter(BboBase):
                     bucketTable[player][bucketName].show(f'  {bucketName}', showCount=False)
             
         
-class BboDefOffTravLine(BboTravLineBase):
+class BboStatsTravLine(BboTravLineBase):
     def __init__(self, bdnum, row, travParser):
-        super(BboDefOffTravLine, self).__init__(bdnum, row, travParser)
+        super(BboStatsTravLine, self).__init__(bdnum, row, travParser)
         # nothing added here
 
 #-------- main stuff starts here -----------
 
-BboDefOffReporter().genReport()
+BboStatsReporter().genReport()
 
