@@ -58,11 +58,16 @@ class BboDDPlayReporter(BboBase):
             for tline in travellers[bdnum]:
                 if self.args.debug:
                     print(bdnum, tline.playerDir, tline.playCount, tline.playString, tline.claimed)
-                print(f"Board {bdnum}, NS:{tline.coloredName('N')}-{tline.coloredName('S')} vs EW:{tline.coloredName('E')}-{tline.coloredName('W')}, {tline.contract} by {tline.decl}({tline.coloredName(tline.decl)})")
-                tline.getPlayAnalysis()
-                tline.formatPlayAnalysis()
-                print(f'Tricks Actually Taken: {tline.tricks}')
-                print()
+                if tline.contract == None:
+                    # special case for pass-out or AVG
+                    print(f"Board {bdnum}, NS:{tline.north}-{tline.south} vs EW:{tline.east}-{tline.west}, {tline.resultStr}")
+                else:
+                    # normal contract with tricks, etc.
+                    print(f"Board {bdnum}, NS:{tline.coloredName('N')}-{tline.coloredName('S')} vs EW:{tline.coloredName('E')}-{tline.coloredName('W')}, {tline.contract} by {tline.decl}({tline.coloredName(tline.decl)})")
+                    tline.getPlayAnalysis()
+                    tline.formatPlayAnalysis()
+                    print(f'Tricks Actually Taken: {tline.tricks}')
+                    print()
             print()
         print('</pre></body></html>')
                 

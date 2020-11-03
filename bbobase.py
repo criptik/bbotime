@@ -152,6 +152,7 @@ class BboTravLineBase(object):
         # parse different parts of result
         resstr = row['Result']
         resstr = re.sub(r'\<.*?\>', '', resstr)
+        self.resultStr = resstr
         if self.args.debug:
             print(resstr, len(resstr))
         if resstr.startswith('PASS') or resstr.startswith('A'):
