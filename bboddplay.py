@@ -32,6 +32,7 @@ class BboDDPlayReporter(BboBase):
         BboDDParTravLine.importArgs(self.args)
         travellers = {}
 
+        self.printHTMLOpening()
         for bdnum in range (1, self.args.boards + 1):
             travellers[bdnum] = []
             for row in self.travTableData[bdnum]:
@@ -39,22 +40,8 @@ class BboDDPlayReporter(BboBase):
                 tline.checkAndAppend(travellers)
         # print('travTableData and travellers are set up')
 
-        print('<html><body><pre>')
-        print('''
-        <style>
-         .button {
-         background-color: white;
-         border: 2px solid black;
-	 border-radius: 8px;
-         color: black;
-         padding: 4px;
-         display: inline-block;
-	 text-decoration: none;
-         }
-        </style>
-        ''')
         for bdnum in range (1, self.args.boards + 1):
-            BboDDParTravLine.dealInfos[bdnum].printHand()
+            print(BboDDParTravLine.dealInfos[bdnum].getHandString())
             for tline in travellers[bdnum]:
                 if self.args.debug:
                     print(bdnum, tline.playerDir, tline.playCount, tline.playString, tline.claimed)
@@ -69,8 +56,7 @@ class BboDDPlayReporter(BboBase):
                     print(f'Tricks Actually Taken: {tline.tricks}')
                     print()
             print()
-        print('</pre></body></html>')
-                
+        self.printHTMLClosing()
 
 
 #-------- main stuff starts here -----------

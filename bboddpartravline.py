@@ -142,7 +142,7 @@ class BboDDParTravLine(BboTravLineBase):
         # now go thru and adjust the ones that involve trick count changes
         lasttrix = self.solvedPlayContents.tricks[0]
         # put in the replay it button in first row, last col
-        tab[0][-1] = f'&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://dds.bridgewebs.com/bsol2/ddummy.htm?lin=&lin={self.linStr}" target="_blank" class="button">Replay It</a>'
+        tab[0][-1] = f'&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://dds.bridgewebs.com/bsol2/ddummy.htm?club=us_tomdeneau&lin={self.linStr}" target="_blank" class="button">Replay It</a>'
         # go thru solvedPlayContents
         for i in range(1, self.solvedPlayContents.number):
             psidx = 2*(i-1)
@@ -254,16 +254,12 @@ class BboDDParTravLine(BboTravLineBase):
             res = dds.CalcAllTablesPBN(ctypes.pointer(self.DDdealsPBN), mode, trumpFilter, ctypes.pointer(self.ddTable), ctypes.pointer(self.pres))
 
 
-        def printHand(self):
-            if False:
-                functions.PrintPBNHand(f'Board: {self.bdnum}', self.DDdealsPBN.deals[0].cards)
-            else:
-                title = f'Board:{self.bdnum}    Vul:{self.getVulStr()}   Dlr:{self.getDealerStr()}'
-                # call helper function with no title
-                handStr = functions.getHandStringPBN(None, self.DDdealsPBN.deals[0].cards)
-                handStr = BboBase.subSuitSym(handStr)
-                print(title)
-                print(handStr)
+        def getHandString(self):
+            title = f'Board:{self.bdnum}    Vul:{self.getVulStr()}   Dlr:{self.getDealerStr()}'
+            # call helper function with no title
+            handStr = functions.getHandStringPBN(None, self.DDdealsPBN.deals[0].cards)
+            handStr = BboBase.subSuitSym(handStr)
+            return f'{title}\n{handStr}'
 
         def getDDTricks(self, suit, dir):
             suitidx = 'SHDCNT'.index(suit)
@@ -273,7 +269,7 @@ class BboDDParTravLine(BboTravLineBase):
             table = ctypes.pointer(self.ddTable.results[0])
             return table.contents.resTable[suitidx][diridx]
             
-        def printTable(self):
+        def getDDTableStr(self, title):
             if not self.Testing:
                 self.getDDTable()
             # print(f'DD Table:\n---------')
@@ -293,15 +289,17 @@ class BboDDParTravLine(BboTravLineBase):
                     numTricks = self.getDDTricks(suit, dir)
                     trickStr = '-' if numTricks <= 6 else f'{numTricks - 6}'
                     tabList[1+didx][1+sidx] = trickStr
-            # add some par info at far right
-            for r in range(rows):
-                tabList[r][cols-2] = ' ' * 12
-            tabList[0][cols-1] = 'Par:'
-            if not self.Testing:
-                tabList[1][cols-1] = self.parString()
-            print(tabulate.tabulate(tabList, tablefmt='plain'), end='\n\n')
-            
-        def printTableClassic(self):
+            if False:
+                # add some par info at far right
+                for r in range(rows):
+                    tabList[r][cols-2] = ' ' * 12
+                tabList[0][cols-1] = 'Par:'
+                if not self.Testing:
+                    tabList[1][cols-1] = self.parString()
+            tabstr = tabulate.tabulate(tabList, tablefmt='plain')
+            return f'{title}\n{"-" * len(title)}\n{tabstr}\n\nPar:{self.parString()}\n'
+
+        def printDDTableClassic(self):
             self.getDDTable()
             print('Table Classic\n-------')
             functions.PrintTable(ctypes.pointer(self.ddTable.results[0]))

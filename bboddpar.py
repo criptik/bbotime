@@ -43,14 +43,42 @@ class BboDDParReporter(BboBase):
         # print('travTableData and travellers are set up')
 
         # hand, ddtable and par display
-        if True:
-            for bdnum in range (1, self.args.boards + 1):
-                # print(f'{bdnum:2}: {BboDDParTravLine.dealInfos[bdnum].pbnDealString}')
-                BboDDParTravLine.dealInfos[bdnum].printHand()
-                BboDDParTravLine.dealInfos[bdnum].printTable()
-                self.showOptimumLeadsAllContracts(bdnum)
-                print()
+        self.printHTMLOpening()
+        for bdnum in range (1, self.args.boards + 1):
+            # print(f'{bdnum:2}: {BboDDParTravLine.dealInfos[bdnum].pbnDealString}')
+            handStr = f'<pre>{BboDDParTravLine.dealInfos[bdnum].getHandString()}</pre>'
+            ddTableStr = f'<pre>{BboDDParTravLine.dealInfos[bdnum].getDDTableStr("Double Dummy Table")}\n\n</pre>'
+            # 3 cols, 1 row in outer table
+            outtab = [['' for i in range(3)] for j in range(1)]             
+            outtab[0][0] = handStr
+            outtab[0][1] = '&nbsp;'
+            outtab[0][2] = ddTableStr
+            print(tabulate.tabulate(outtab, tablefmt='unsafehtml'))
+            self.showOptimumLeadsAllContracts(bdnum)
+            print()
+            self.printResultsTable(bdnum)
+        self.printHTMLClosing()
 
+    @staticmethod
+    def tlineScore(tline):
+        return tline.nsScore
+    
+    def printResultsTable(self, bdnum):
+        print()
+        numResults = len(self.travellers[bdnum])
+        rows = numResults
+        cols = 8
+        tab = [['' for i in range(cols)] for j in range(rows)]
+        r = 0
+        calist = ['left' for i in range(cols)]
+        calist [3] = calist[4] = 'right'
+        
+        for tline in sorted(self.travellers[bdnum], reverse=True, key=self.tlineScore):
+            tab[r][0:2] = [f'{tline.north}-{tline.south}&nbsp;', f'{tline.east}-{tline.west}&nbsp;']
+            tab[r][2:4] = [f'{tline.resultStr}&nbsp;', f'{tline.nsPoints}&nbsp;', f'{tline.nsScore:5.2f}%', '']
+            r += 1
+        print(tabulate.tabulate(tab, tablefmt='unsafehtml', colalign=calist))
+        
     def showOptimumLeadsAllContracts(self, bdnum):
         print('Optimum Leads for Bid Contracts')
         print('-------------------------------')

@@ -160,7 +160,7 @@ def getHandString(title, remainCards):
     text = []
     blankLine =  b''
     suitChar = b'SHDC'
-    blankLine = blankLine.ljust(80)
+    blankLine = blankLine.ljust(50)
     for l in range(DDS_HAND_LINES):
         text.append(bytearray(blankLine))
 

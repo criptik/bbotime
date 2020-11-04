@@ -113,8 +113,27 @@ class BboBase(object):
     # allow child to add its own args
     def addParserArgs(self, parser):
         pass
-        
-                                    
+
+    def printHTMLOpening(self):
+        print('<html><body><pre>')
+        print('''
+        <style>
+         .button {
+         background-color: white;
+         border: 2px solid black;
+	 border-radius: 8px;
+         color: black;
+         padding: 4px;
+         display: inline-block;
+	 text-decoration: none;
+         }
+        </style>
+        ''')
+   
+    def printHTMLClosing(self):
+        print('</pre></body></html>')
+
+
 partnerDir = {'North' : 'South',
                'East' : 'West'}
 
@@ -144,7 +163,7 @@ class BboTravLineBase(object):
         self.origEast = self.origNameForDirection(row, 'East')
 
         try:
-            self.nsPoints = int(row['NS Points'])
+            self.nsPoints = int(self.travParser.getNSPoints(row))
         except:
             self.nsPoints = None
         self.nsScore  = float(self.travParser.getMPPct(row).rstrip('%'))
@@ -266,6 +285,10 @@ class TravParserBase(ABC):
     def getMPPct(self, row):
         pass
 
+    @abstractmethod
+    def getNSPoints(self, row):
+        pass
+
     def removePercentSyms(self, s):
         # subsitute % symbols
         s = re.sub('%7C', '|', s)
@@ -297,6 +320,9 @@ class TravParserHtml(TravParserBase):
     
     def getMPPct(self, row):
         return row['Score']
+
+    def getNSPoints(self, row):
+        return row['NS Points']
     
     # this routine reads the html file for one traveller and uses BeautifulSoup
     # to return an array of rows, each a dict for a single row of the html file
@@ -359,7 +385,10 @@ class TravParserCsv(TravParserBase):
 
     def getMPPct(self, row):
         return row['Percent']
-    
+
+    def getNSPoints(self, row):
+        return row['Score']
+
     def doParsing(self, travTableData):
         fname = None
         for f in os.listdir(self.args.dir):
