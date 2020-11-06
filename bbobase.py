@@ -20,7 +20,7 @@ class BboBase(object):
     # the main work routine which reads in the traveler files into travTableData[]
     # and then calls the child to do the rest of the work
     def genReport(self):
-        self.args = self.parseArguments()
+        self.parseArguments()
         if self.args.debug:
             print(self.args.__dict__)
 
@@ -54,7 +54,6 @@ class BboBase(object):
         # init, array for each bdnum
         for bdnum in range(1, self.args.boards+1):
             travTableData[bdnum] = []
-        self.travParser = self.determineTravParser()
         self.travParser.doParsing(travTableData)
         
         # if robotScores are supplied, use that to try to differentiate between two robot pairs
@@ -70,7 +69,9 @@ class BboBase(object):
                 return TravParserHtml(self.args)
             elif f.endswith('.csv'):
                 return TravParserCsv(self.args)
-        return None
+        # if we got this far, we failed.
+        print('--dir directory must contain either .html or .csv files', file=sys.stderr)
+        sys.exit(1)
         
     def createObject(self, bdnum, row, travParser):
         return BboTravLineBase(self.args, bdnum, row, travParser)
@@ -94,21 +95,18 @@ class BboBase(object):
         # allow child to add args
         self.addParserArgs(parser)
         
-        args = parser.parse_args()
+        self.args = parser.parse_args()
         # handle some common fixups
         # with no explicit boards count, count files in directory
-        if args.boards is None:
-            args.boards = len([name for name in os.listdir(args.dir) if os.path.isfile(os.path.join(args.dir, name))])
+
+        self.travParser = self.determineTravParser()
+        if self.args.boards is None:
+            self.args.boards = self.travParser.getNumBoards()
 
         # detect defaults for bpr
-        if args.bpr is None:
-            if args.boards == 20:
-                args.bpr = 4
-            elif args.boards == 21:
-                args.bpr = 3
-
-        self.args = args
-        return args
+        if self.args.bpr is None:
+            bprMap = {20:4, 21:3, 8:2, 9:3}
+            self.args.bpr = bprMap.get(self.args.boards)
 
     # allow child to add its own args
     def addParserArgs(self, parser):
@@ -289,6 +287,9 @@ class TravParserBase(ABC):
     def getNSPoints(self, row):
         pass
 
+    def getNumBoards(self):
+        pass
+
     def removePercentSyms(self, s):
         # subsitute % symbols
         s = re.sub('%7C', '|', s)
@@ -323,6 +324,10 @@ class TravParserHtml(TravParserBase):
 
     def getNSPoints(self, row):
         return row['NS Points']
+
+    def getNumBoards(self):
+        # html directories have one file per board
+        return len([name for name in os.listdir(self.args.dir) if os.path.isfile(os.path.join(self.args.dir, name)) and name.endswith('.html')])
     
     # this routine reads the html file for one traveller and uses BeautifulSoup
     # to return an array of rows, each a dict for a single row of the html file
@@ -389,14 +394,29 @@ class TravParserCsv(TravParserBase):
     def getNSPoints(self, row):
         return row['Score']
 
-    def doParsing(self, travTableData):
+    def getNumBoards(self):
+        # csv directories have one .csv file
+        # look in that for a #Boards line
+        fname = self.getCsvFileName()
+        with open(fname, 'r') as read_obj:
+            line = next(read_obj).rstrip()
+            while line:
+                fields = line.split(',')
+                if fields[0] == '#BoardCount':
+                    return int(fields[1])
+                line = next(read_obj).rstrip()
+        return None
+
+    def getCsvFileName(self):
         fname = None
-        for f in os.listdir(self.args.dir):
-            if f.endswith('.csv'):
-                fname = f
-                break
-            
-        with open(f'{self.args.dir}/{fname}', 'r') as read_obj:
+        for fn in os.listdir(self.args.dir):
+            if fn.endswith('.csv'):
+                return f'{self.args.dir}/{fn}'
+        return None
+    
+    def doParsing(self, travTableData):
+        fname = self.getCsvFileName()    
+        with open(fname, 'r') as read_obj:
             found = False
             travlines = []
             while True:

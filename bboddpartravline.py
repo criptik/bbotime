@@ -129,7 +129,10 @@ class BboDDParTravLine(BboTravLineBase):
         myName = self.playerDir[myIndex]
         myStyledName = myName if myColor is None else f'<span style="background-color:{myColor}">{myName}</span>'
         return myStyledName
-                
+
+    def replayButtonHtml(self):
+        return f'&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://dds.bridgewebs.com/bsol2/ddummy.htm?club=us_tomdeneau&lin={self.linStr}" target="_blank" class="button">Replay It</a>'
+
     def formatPlayAnalysis(self):
         # functions.PrintPBNPlay(ctypes.pointer(DDplayPBN), ctypes.pointer(solved))
         print(f'DD Expected Tricks: {self.solvedPlayContents.tricks[0]}')
@@ -142,7 +145,7 @@ class BboDDParTravLine(BboTravLineBase):
         # now go thru and adjust the ones that involve trick count changes
         lasttrix = self.solvedPlayContents.tricks[0]
         # put in the replay it button in first row, last col
-        tab[0][-1] = f'&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://dds.bridgewebs.com/bsol2/ddummy.htm?club=us_tomdeneau&lin={self.linStr}" target="_blank" class="button">Replay It</a>'
+        tab[0][-1] = self.replayButtonHtml()
         # go thru solvedPlayContents
         for i in range(1, self.solvedPlayContents.number):
             psidx = 2*(i-1)

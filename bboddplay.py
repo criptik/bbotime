@@ -38,7 +38,6 @@ class BboDDPlayReporter(BboBase):
             for row in self.travTableData[bdnum]:
                 tline = BboDDParTravLine(bdnum, row, self.travParser)
                 tline.checkAndAppend(travellers)
-        # print('travTableData and travellers are set up')
 
         for bdnum in range (1, self.args.boards + 1):
             print(BboDDParTravLine.dealInfos[bdnum].getHandString())
@@ -50,7 +49,9 @@ class BboDDPlayReporter(BboBase):
                     print(f"Board {bdnum}, NS:{tline.north}-{tline.south} vs EW:{tline.east}-{tline.west}, {tline.resultStr}")
                 else:
                     # normal contract with tricks, etc.
-                    print(f"Board {bdnum}, NS:{tline.coloredName('N')}-{tline.coloredName('S')} vs EW:{tline.coloredName('E')}-{tline.coloredName('W')}, {tline.contract} by {tline.decl}({tline.coloredName(tline.decl)})")
+                    nsScore = tline.nsScore
+                    ewScore = 100 - nsScore
+                    print(f"Board {bdnum}, NS:{tline.coloredName('N')}-{tline.coloredName('S')} ({nsScore:.2f}%)  vs EW:{tline.coloredName('E')}-{tline.coloredName('W')} ({ewScore:.2f}%), {tline.resultStr}, NS:{tline.nsPoints}")
                     tline.getPlayAnalysis()
                     tline.formatPlayAnalysis()
                     print(f'Tricks Actually Taken: {tline.tricks}')

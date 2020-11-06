@@ -48,6 +48,10 @@ class BboStatsReporter(BboBase):
                 # for now, we really only need North and East
                 for player in tline.playerDir[:2]:
                     playerIdx = tline.playerDir.index(player)
+                    pard = tline.playerDir[(playerIdx+2)%4]
+                    # if names are specified check whether player or his partner are in names, skip if not
+                    if self.args.names is not None and player not in self.args.names and pard not in self.args.names:
+                        continue
                     score = tline.nsScore if playerIdx in [0, 2] else 100-tline.nsScore
                     bucketNames = ['All Hands']   # everything goes in here
                     if tline.decl is None:

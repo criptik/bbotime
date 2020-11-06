@@ -39,7 +39,7 @@ class BboDDParReporter(BboBase):
             for row in self.travTableData[bdnum]:
                 tline = BboDDParTravLine(bdnum, row, self.travParser)
                 # tline.getDDTable()
-                self.travellers[bdnum].append(tline)
+                tline.checkAndAppend(self.travellers)
         # print('travTableData and travellers are set up')
 
         # hand, ddtable and par display
@@ -76,6 +76,7 @@ class BboDDParReporter(BboBase):
         for tline in sorted(self.travellers[bdnum], reverse=True, key=self.tlineScore):
             tab[r][0:2] = [f'{tline.north}-{tline.south}&nbsp;', f'{tline.east}-{tline.west}&nbsp;']
             tab[r][2:4] = [f'{tline.resultStr}&nbsp;', f'{tline.nsPoints}&nbsp;', f'{tline.nsScore:5.2f}%', '']
+            tab[r][-1] = tline.replayButtonHtml()
             r += 1
         print(tabulate.tabulate(tab, tablefmt='unsafehtml', colalign=calist))
         
