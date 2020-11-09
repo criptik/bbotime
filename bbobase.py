@@ -4,6 +4,7 @@ import os
 import re
 import time
 import argparse
+import tabulate
 from abc import ABC, abstractmethod
 import csv
 
@@ -113,7 +114,7 @@ class BboBase(object):
         pass
 
     def printHTMLOpening(self):
-        print('<html><body><pre>')
+        print('<!doctype html>\n<html><body><pre>')
         print('''
         <style>
          .button {
@@ -131,6 +132,30 @@ class BboBase(object):
     def printHTMLClosing(self):
         print('</pre></body></html>')
 
+    @staticmethod
+    def genHtmlTable(tab, args, colalignlist=None):
+        # in args, we set this false if using some older version of tabulate
+        # which doesn't support unsafehtml tablefmt
+        if not args.avoidUnsafeHtml:
+            tableHtml = tabulate.tabulate(tab, tablefmt='unsafehtml', colalign=colalignlist)
+        else:
+            # if unsafeHtml doesn't work we have to use html and unescape a bunch of stuff
+            tableHtml = tabulate.tabulate(tab, tablefmt='html', colalign=colalignlist)
+            tableHtml = self.unescapeInnerHtml(tableHtml)
+        # doctype html docs don't seem to ignore the multiple whitespace at the end of cells
+        # so fix that here, (Maybe there is a way to tell tabulate not to emit those?)
+        tableHtml = re.sub(' *</td>', '</td>', tableHtml)
+        return tableHtml
+
+    @staticmethod
+    def unescapeInnerHtml(str):
+        str = re.sub('&lt;', '<', str)
+        str = re.sub('&gt;', '>', str)
+        str = re.sub('&quot;', '"', str)
+        str = re.sub('&amp;', '&', str)
+        str = re.sub('&#x27;', "'", str)
+        return str
+        
 
 partnerDir = {'North' : 'South',
                'East' : 'West'}

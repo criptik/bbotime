@@ -8,7 +8,6 @@ import os
 import collections
 from pprint import pprint
 import re
-import tabulate
 sys.path.append('./python-dds/examples')
 
 import dds

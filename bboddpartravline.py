@@ -137,8 +137,9 @@ class BboDDParTravLine(BboTravLineBase):
         # functions.PrintPBNPlay(ctypes.pointer(DDplayPBN), ctypes.pointer(solved))
         print(f'DD Expected Tricks: {self.solvedPlayContents.tricks[0]}')
         numPlays = self.solvedPlayContents.number
-        rows = ((numPlays+3)//4 * 4) // 4
-        cols = 1 + 4 + 1   # 1 for leader, 4 for cards/trick, 1 for buttonx
+        rows = (((numPlays-1)+3)//4 * 4) // 4
+        cols = 1 + 4 + 1   # 1 for leader, 4 for cards/trick, 1 for button
+        # print('numplays-', numPlays, ',rows=', rows, file=sys.stderr)
         tab = [['' for i in range(cols)] for j in range(rows)]
         # in addition to showing cards played, we also
         # now go thru and adjust the ones that involve trick count changes
@@ -147,7 +148,7 @@ class BboDDParTravLine(BboTravLineBase):
         # put in the replay it button in first row, last col
         tab[0][-1] = self.replayButtonHtml()
         # go thru solvedPlayContents
-        for i in range(1, self.solvedPlayContents.number):
+        for i in range(1, numPlays):
             psidx = 2*(i-1)
             r = (i-1)//4
             c = (i-1)%4 + 1
@@ -170,23 +171,9 @@ class BboDDParTravLine(BboTravLineBase):
             if c == 1:
                 leader = self.dealInfos[self.bdnum].pbnDeal.playerHoldingCard(cellSuit, cellRank)
                 tab[r][0] = f'{leader}&nbsp;&nbsp'
-        # set this false if using some older version of tabulate which doesn't support unsafehtml tablefmt
-        if not self.args.avoidUnsafeHtml:
-            tableHtml = tabulate.tabulate(tab, tablefmt='unsafehtml')
-        else:
-            # if unsafeHtml doesn't work we have to use html and unescape a bunch of stuff
-            tableHtml = tabulate.tabulate(tab, tablefmt='html')
-            tableHtml = self.unescapeInnerHtml(tableHtml)
+        tableHtml = BboBase.genHtmlTable(tab, self.args)
         print(tableHtml, end='')
 
-    def unescapeInnerHtml(self, str):
-        str = re.sub('&lt;', '<', str)
-        str = re.sub('&gt;', '>', str)
-        str = re.sub('&quot;', '"', str)
-        str = re.sub('&amp;', '&', str)
-        str = re.sub('&#x27;', "'", str)
-        return str
-        
     def getOptimumLeads(self):
         dlPBN = dds.dealPBN()
         fut2 = dds.futureTricks()

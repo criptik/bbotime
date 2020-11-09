@@ -8,7 +8,6 @@ import os
 import collections
 from pprint import pprint
 import re
-import tabulate
 sys.path.append('./python-dds/examples')
 
 import dds
@@ -53,7 +52,7 @@ class BboDDParReporter(BboBase):
             outtab[0][0] = handStr
             outtab[0][1] = '&nbsp;'
             outtab[0][2] = ddTableStr
-            print(tabulate.tabulate(outtab, tablefmt='unsafehtml'))
+            print(BboBase.genHtmlTable(outtab, self.args))
             self.showOptimumLeadsAllContracts(bdnum)
             print()
             self.printResultsTable(bdnum)
@@ -78,8 +77,8 @@ class BboDDParReporter(BboBase):
             tab[r][2:4] = [f'{tline.resultStr}&nbsp;', f'{tline.nsPoints}&nbsp;', f'{tline.nsScore:5.2f}%', '']
             tab[r][-1] = tline.replayButtonHtml()
             r += 1
-        print(tabulate.tabulate(tab, tablefmt='unsafehtml', colalign=calist))
-        
+        print(BboBase.genHtmlTable(tab, self.args, colalignlist=calist))
+
     def showOptimumLeadsAllContracts(self, bdnum):
         print('Optimum Leads for Bid Contracts')
         print('-------------------------------')
