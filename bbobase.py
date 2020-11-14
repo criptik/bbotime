@@ -91,6 +91,7 @@ class BboBase(object):
         parser.add_argument('--tablefmt', default='pretty', help='tabulate table format')
         parser.add_argument('--names', nargs="+", help='restrict to travellers with these names')
         parser.add_argument('--avoidUnsafeHtml', default=False, action='store_true', help='set if tabulate unsafehtml tablefmt does not work') 
+        parser.add_argument('--playTricksLeftRight', default=False, action='store_true', help='set to get trick order in sequence from left to right') 
         parser.add_argument('--debug', default=False, action='store_true', help='print some debug info') 
 
         # allow child to add args
@@ -133,11 +134,11 @@ class BboBase(object):
         print('</pre></body></html>')
 
     @staticmethod
-    def genHtmlTable(tab, args, colalignlist=None):
+    def genHtmlTable(tab, args, colalignlist=None, headers=None):
         # in args, we set this false if using some older version of tabulate
         # which doesn't support unsafehtml tablefmt
         if not args.avoidUnsafeHtml:
-            tableHtml = tabulate.tabulate(tab, tablefmt='unsafehtml', colalign=colalignlist)
+            tableHtml = tabulate.tabulate(tab, tablefmt='unsafehtml', colalign=colalignlist, headers=headers)
         else:
             # if unsafeHtml doesn't work we have to use html and unescape a bunch of stuff
             tableHtml = tabulate.tabulate(tab, tablefmt='html', colalign=colalignlist)
@@ -145,6 +146,8 @@ class BboBase(object):
         # doctype html docs don't seem to ignore the multiple whitespace at the end of cells
         # so fix that here, (Maybe there is a way to tell tabulate not to emit those?)
         tableHtml = re.sub(' *</td>', '</td>', tableHtml)
+        # do that for the header cells also
+        tableHtml = re.sub(' *</th>', '</th>', tableHtml)
         return tableHtml
 
     @staticmethod

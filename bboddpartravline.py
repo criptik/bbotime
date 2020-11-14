@@ -121,14 +121,20 @@ class BboDDParTravLine(BboTravLineBase):
 
     def defenderColor(self, dirLetter):
         return 'pink' if dirLetter in 'NE' else 'orange'
-    
-    def coloredName(self, myLetter):
+
+    def colorForDir(self, myLetter):
         myIndex = 'NESW'.index(myLetter)
         pardLetter = 'NESW'[(myIndex + 2) % 4]
         myColor = self.declColor() if self.decl == myLetter else None if self.decl == pardLetter else self.defenderColor(myLetter)
+        return myColor
+        
+    def coloredName(self, myLetter):
+        myColor = self.colorForDir(myLetter)
+        myIndex = 'NESW'.index(myLetter)
         myName = self.playerDir[myIndex]
         myStyledName = myName if myColor is None else f'<span style="background-color:{myColor}">{myName}</span>'
         return myStyledName
+
 
     def replayButtonHtml(self):
         return f'&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://dds.bridgewebs.com/bsol2/ddummy.htm?club=us_tomdeneau&lin={self.linStr}" target="_blank" class="button">Replay It</a>'
@@ -138,7 +144,8 @@ class BboDDParTravLine(BboTravLineBase):
         print(f'DD Expected Tricks: {self.solvedPlayContents.tricks[0]}')
         numPlays = self.solvedPlayContents.number
         rows = (((numPlays-1)+3)//4 * 4) // 4
-        cols = 1 + 4 + 1   # 1 for leader, 4 for cards/trick, 1 for button
+        trickColCount = 4 
+        cols = 1 + trickColCount + 1   # 1 for leader, 4 for cards/trick, 1 for button
         # print('numplays-', numPlays, ',rows=', rows, file=sys.stderr)
         tab = [['' for i in range(cols)] for j in range(rows)]
         # in addition to showing cards played, we also
@@ -148,12 +155,32 @@ class BboDDParTravLine(BboTravLineBase):
         # put in the replay it button in first row, last col
         tab[0][-1] = self.replayButtonHtml()
         # go thru solvedPlayContents
+        rowLeader = None
         for i in range(1, numPlays):
             psidx = 2*(i-1)
-            r = (i-1)//4
-            c = (i-1)%4 + 1
             cellCard = self.playString[psidx : psidx+2]
             (cellSuit, cellRank) = cellCard
+            cellCardLead = ''  if self.args.playTricksLeftRight else '&nbsp;' # add leading space sometimes
+            # first in trick/row, determine leader
+            r = (i-1)//4
+            if (i-1)%4 == 0:
+                rowLeader = self.dealInfos[self.bdnum].pbnDeal.playerHoldingCard(cellSuit, cellRank)
+                # add leader in first column if condensed format
+                if self.args.playTricksLeftRight:
+                    tab[r][0] = f'{rowLeader}<sub>&nbsp;&nbsp</sub>'
+                else:
+                    cellCardLead = '&#10148;' # or alternative right ararow &#8594;
+            cellCard =  cellCardLead + cellCard
+            trickStartColumn = 1 if self.args.playTricksLeftRight else 1 + 'NESW'.index(rowLeader)
+            # starting column depends on format type
+            c = (i-1)%4 + trickStartColumn
+            c = c-4 if c > 4 else c
+            if not self.args.playTricksLeftRight:
+                c = (c-1)%4 + 1
+                # also show winner of previous trick
+                if (i-1)%4 == 0 and r != 0:
+                    tab[r-1][c] = re.sub('<sub', '*<sub', tab[r-1][c])
+                    
             trix = self.solvedPlayContents.tricks[i]
             if trix == lasttrix:
                 tab[r][c] = f'{cellCard}<sub>&nbsp;&nbsp</sub>'
@@ -167,11 +194,21 @@ class BboDDParTravLine(BboTravLineBase):
                     bgcolor = self.defenderColor(player)
                 tab[r][c] = f'<span style="background-color:{bgcolor}">{cellCard}<sub> {trix:2}</sub>'
                 lasttrix = trix
-            # add leader in first column if this is first card of trick
-            if c == 1:
-                leader = self.dealInfos[self.bdnum].pbnDeal.playerHoldingCard(cellSuit, cellRank)
-                tab[r][0] = f'{leader}&nbsp;&nbsp'
-        tableHtml = BboBase.genHtmlTable(tab, self.args)
+        if self.args.playTricksLeftRight:
+            myHeaders = ['Lead','','','','','']
+        else:
+            myHeaders = ['']
+            for i in range(trickColCount):
+                myLetter = 'NESW'[i%4]
+                myColor = self.colorForDir(myLetter)
+                # use declColor for both decl and dummy
+                if myColor == None:
+                    myColor = self.declColor()
+                myHeaders.append( f'<span style="background-color:{myColor}">&nbsp;{myLetter}&nbsp;</span>&nbsp;')
+            myHeaders.append('') # for last column
+        # print(myHeaders, file=sys.stderr)
+        # print(tab, file=sys.stderr)
+        tableHtml = BboBase.genHtmlTable(tab, self.args, headers=myHeaders)
         print(tableHtml, end='')
 
     def getOptimumLeads(self):
