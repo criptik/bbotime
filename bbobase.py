@@ -134,7 +134,7 @@ class BboBase(object):
         print('</pre></body></html>')
 
     @staticmethod
-    def genHtmlTable(tab, args, colalignlist=None, headers=None):
+    def genHtmlTable(tab, args, colalignlist=None, headers=()):
         # in args, we set this false if using some older version of tabulate
         # which doesn't support unsafehtml tablefmt
         if not args.avoidUnsafeHtml:

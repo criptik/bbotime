@@ -44,15 +44,7 @@ class BboDDParReporter(BboBase):
         # hand, ddtable and par display
         self.printHTMLOpening()
         for bdnum in range (1, self.args.boards + 1):
-            # print(f'{bdnum:2}: {BboDDParTravLine.dealInfos[bdnum].pbnDealString}')
-            handStr = f'<pre>{BboDDParTravLine.dealInfos[bdnum].getHandString()}</pre>'
-            ddTableStr = f'<pre>{BboDDParTravLine.dealInfos[bdnum].getDDTableStr("Double Dummy Table")}\n\n</pre>'
-            # 3 cols, 1 row in outer table
-            outtab = [['' for i in range(3)] for j in range(1)]             
-            outtab[0][0] = handStr
-            outtab[0][1] = '&nbsp;'
-            outtab[0][2] = ddTableStr
-            print(BboBase.genHtmlTable(outtab, self.args))
+            BboDDParTravLine.printHandPlusDDTable(bdnum)
             self.showOptimumLeadsAllContracts(bdnum)
             print()
             self.printResultsTable(bdnum)

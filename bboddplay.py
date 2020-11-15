@@ -39,7 +39,7 @@ class BboDDPlayReporter(BboBase):
                 tline.checkAndAppend(travellers)
 
         for bdnum in range (1, self.args.boards + 1):
-            print(BboDDParTravLine.dealInfos[bdnum].getHandString())
+            BboDDParTravLine.printHandPlusDDTable(bdnum)
             for tline in travellers[bdnum]:
                 if self.args.debug:
                     print(bdnum, tline.playerDir, tline.playCount, tline.playString, tline.claimed)

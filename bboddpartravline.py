@@ -107,7 +107,7 @@ class BboDDParTravLine(BboTravLineBase):
         if self.args.debug:
             print('playstring len is ', len(self.playString), self.playString)
         DDplayPBN.cards = self.playString.encode('utf-8')
-        # print(DDplayPBN.number, DDplayPBN.cards)
+        # print(DDplayPBN.number, DDplayPBN.cards, file=sys.stderr)
         threadIndex = 0
         res = dds.AnalysePlayPBN(
             dlPBN,
@@ -115,6 +115,21 @@ class BboDDParTravLine(BboTravLineBase):
             ctypes.pointer(solved),
             threadIndex)
         self.solvedPlayContents = ctypes.pointer(solved).contents
+        # if there are 52 cards in the playstring, the solvedPlayContents stop at 48
+        # (because on the last trick there are no choices to be made)
+        # But when we format the play analysis, we would like to show all the tricks
+        # that were played.  So here we check for the case that the playString (playCount)
+        # is greater than the solvedPlayContents.number, and we add some dummy records
+        # (there will never be DD expected trick changes in this last trick but at least we will see it).
+        # -1, +1 logic below is because the first trickCount in solvedPLayContents
+        # is the expected tricks taken before any cards are played.
+        if self.playCount > self.solvedPlayContents.number - 1:
+            numPlaysSolved = self.solvedPlayContents.number
+            lastTricksVal = self.solvedPlayContents.tricks[numPlaysSolved-1]
+            self.solvedPlayContents.number = self.playCount + 1
+            for i in range(numPlaysSolved, self.playCount+1):
+                self.solvedPlayContents.tricks[i] = lastTricksVal
+                
 
     def declColor(self):
         return 'cyan'
@@ -146,7 +161,7 @@ class BboDDParTravLine(BboTravLineBase):
         rows = (((numPlays-1)+3)//4 * 4) // 4
         trickColCount = 4 
         cols = 1 + trickColCount + 1   # 1 for leader, 4 for cards/trick, 1 for button
-        # print('numplays-', numPlays, ',rows=', rows, file=sys.stderr)
+        # print('numplays-', numPlays, ',rows=', rows, 'solved=', self.solvedPlayContents.tricks[numPlays-1], file=sys.stderr)
         tab = [['' for i in range(cols)] for j in range(rows)]
         # in addition to showing cards played, we also
         # now go thru and adjust the ones that involve trick count changes
@@ -239,7 +254,19 @@ class BboDDParTravLine(BboTravLineBase):
             functions.PrintFut(line, ctypes.pointer(fut2))
 
         return fut2
-    
+
+    # print hand and DD table using outer html table
+    @classmethod
+    def printHandPlusDDTable(cls, bdnum):
+        handStr = f'<pre>{cls.dealInfos[bdnum].getHandString()}</pre>'
+        ddTableStr = f'<pre>{cls.dealInfos[bdnum].getDDTableStr("Double Dummy Table")}\n\n</pre>'
+        # 3 cols, 1 row in outer table
+        outtab = [['' for i in range(3)] for j in range(1)]             
+        outtab[0][0] = handStr
+        outtab[0][1] = '&nbsp;'
+        outtab[0][2] = ddTableStr
+        print(BboBase.genHtmlTable(outtab, cls.args))
+        
     # inner class DealInfo
     class DealInfo(object):
         Testing = False
