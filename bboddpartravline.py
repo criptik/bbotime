@@ -2,10 +2,6 @@ import sys
 import time
 import os
 import collections
-import sys
-import time
-import os
-import collections
 from pprint import pprint
 import re
 import tabulate
@@ -16,6 +12,11 @@ import ctypes
 import functions
 
 from bbobase import BboBase, BboTravLineBase
+from bbobidparcalc import BiddingParCalc
+
+
+def nested_dict():
+    return collections.defaultdict(nested_dict)
 
 
 class BboDDParTravLine(BboTravLineBase):
@@ -266,6 +267,10 @@ class BboDDParTravLine(BboTravLineBase):
         outtab[0][1] = '&nbsp;'
         outtab[0][2] = ddTableStr
         print(BboBase.genHtmlTable(outtab, cls.args))
+
+    def calcBiddingParList(self):
+        calc = BiddingParCalc(self.bdnum, self.dealInfos[self.bdnum])
+        calc.calcPar()
         
     # inner class DealInfo
     class DealInfo(object):
@@ -343,13 +348,6 @@ class BboDDParTravLine(BboTravLineBase):
                     numTricks = self.getDDTricks(suit, dir)
                     trickStr = '-' if numTricks <= 6 else f'{numTricks - 6}'
                     tabList[1+didx][1+sidx] = trickStr
-            if False:
-                # add some par info at far right
-                for r in range(rows):
-                    tabList[r][cols-2] = ' ' * 12
-                tabList[0][cols-1] = 'Par:'
-                if not self.Testing:
-                    tabList[1][cols-1] = self.parString()
             tabstr = tabulate.tabulate(tabList, tablefmt='plain')
             return f'{title}\n{"-" * len(title)}\n{tabstr}\n\nPar:{self.parString()}\n'
 
@@ -375,6 +373,38 @@ class BboDDParTravLine(BboTravLineBase):
                 3 : 'E/W',
             }
             return strmap[self.getVulIndex()]
+
+        # get raw "dd" score possible for a suit and level,
+        # given that dd computed we can take trix number of tricks
+        def getRawScore(self, suit, level, trix):
+            vul = self.getVulIndex()
+            # print(suit, level+6, trix, file=sys.stderr)
+            if level+6 > trix:
+                # going down
+                down = (level+6) - trix
+                if not vul:
+                    score = (0, 100, 300, 500, 800, 1100, 1400, 1700, 2000, 2300, 2600, 2900, 3200, 3500)[down]
+                else:
+                    score = (0, 200, 500, 800, 1100, 1400, 1700, 2000, 2300, 2600, 2900, 3200, 3500, 3800)[down]
+                return -1*score
+            else:
+                gamebonus = 50
+                slambonus = 0
+                # making contract
+                if suit in 'DC':
+                    trickval = level * 20
+                elif suit in 'SH':
+                    trickval = level * 30
+                else:
+                    trickval = 10 + (level * 30)
+                if trickval >= 100:
+                    gamebonus = 300 if not vul else 500
+                if level == 6:
+                    slambonus = 500 if not vul else 750
+                elif level == 7:
+                    slambonus = 1000 if not vul else 1500
+                return trickval + gamebonus + slambonus
+                    
         
         def getNSPar(self):
             self.getDDTable()
