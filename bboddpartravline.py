@@ -72,6 +72,17 @@ class BboDDParTravLine(BboTravLineBase):
             splits[1] = int(barsplits[0])  # amount claimed
         return splits
         
+    def linToPbnBidList(self):
+        s = self.linStr
+        splits = re.split('\|mb\|', s)
+        splits = splits[1:-1]
+        splits.append('p')
+        # get rid of any alert parts
+        for n in range(len(splits)):
+            splits[n] = re.sub('\|an.*', '', splits[n])
+        # print(splits, file=sys.stderr)
+        return splits
+        
     def getDDTable(self):
         dealInfo = self.dealInfos[self.bdnum]
         return dealInfo.getDDTable()
@@ -270,7 +281,8 @@ class BboDDParTravLine(BboTravLineBase):
 
     def calcBiddingParList(self):
         calc = BiddingParCalc(self.bdnum, self.dealInfos[self.bdnum])
-        calc.calcPar()
+        bids = self.linToPbnBidList()
+        calc.calcPar(bids)
         
     # inner class DealInfo
     class DealInfo(object):
@@ -374,38 +386,46 @@ class BboDDParTravLine(BboTravLineBase):
             }
             return strmap[self.getVulIndex()]
 
-        # get raw "dd" score possible for a suit and level,
+        # get raw score possible for a suit and level and double situation
         # given that dd computed we can take trix number of tricks
-        def getRawScore(self, suit, level, trix):
-            vul = self.getVulIndex()
+        def getRawScore(self, suit, level, dblFlag, pair, trix):
+            downDblNotVulList = (0, 100, 300, 500, 800, 1100, 1400, 1700, 2000, 2300, 2600, 2900, 3200, 3500)
+            downDblVulList    = (0, 200, 500, 800, 1100, 1400, 1700, 2000, 2300, 2600, 2900, 3200, 3500, 3800)
+
+            vulIndex = self.getVulIndex()
+            isVul = vulIndex == 1 or (pair == 'NS' and vulIndex == 2) or (pair == 'EW' and vulIndex == 3)
             # print(suit, level+6, trix, file=sys.stderr)
-            if level+6 > trix:
+            if trix < level+6:
                 # going down
                 down = (level+6) - trix
-                if not vul:
-                    score = (0, 100, 300, 500, 800, 1100, 1400, 1700, 2000, 2300, 2600, 2900, 3200, 3500)[down]
-                else:
-                    score = (0, 200, 500, 800, 1100, 1400, 1700, 2000, 2300, 2600, 2900, 3200, 3500, 3800)[down]
+                if dblFlag == 0:
+                    score = down * 50 if not isVul else down * 100
+                elif dblFlag == 1 or dblFlag == 2:
+                    downList = downDblNotVulList if not isVul else downDblVulList
+                    score = downList[down] * dblFlag
                 return -1*score
             else:
+                # making something
                 gamebonus = 50
                 slambonus = 0
                 # making contract
-                if suit in 'DC':
-                    trickval = level * 20
-                elif suit in 'SH':
-                    trickval = level * 30
+                overtrix = (trix-6) - level
+                ptsPerTrick = 20 if suit in 'DC' else 30
+                trickOneBonus = 10 if suit == 'N' else 0
+                bidTrickVal = trickOneBonus + level * ptsPerTrick * (2 ** dblFlag)
+                if dblFlag == 0:
+                    overTrickVal = overtrix * ptsPerTrick
                 else:
-                    trickval = 10 + (level * 30)
-                if trickval >= 100:
-                    gamebonus = 300 if not vul else 500
+                    overTrickVal = overtrix * (100 if not isVul else 200) * (dblFlag)
+                if bidTrickVal >= 100:
+                    gamebonus = 300 if not isVul else 500
                 if level == 6:
-                    slambonus = 500 if not vul else 750
+                    slambonus = 500 if not isVul else 750
                 elif level == 7:
-                    slambonus = 1000 if not vul else 1500
-                return trickval + gamebonus + slambonus
-                    
-        
+                    slambonus = 1000 if not isVul else 1500
+                insultVal = 50 * dblFlag
+                return bidTrickVal + overTrickVal + gamebonus + slambonus + insultVal
+
         def getNSPar(self):
             self.getDDTable()
             if self.parResults is None:
