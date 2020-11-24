@@ -281,8 +281,8 @@ class BboDDParTravLine(BboTravLineBase):
 
     def calcBiddingParList(self):
         calc = BiddingParCalc(self.bdnum, self.dealInfos[self.bdnum])
-        bids = self.linToPbnBidList()
-        calc.calcPar(bids)
+        bidList = self.linToPbnBidList()
+        return calc.calcParsForBidList(bidList)
         
     # inner class DealInfo
     class DealInfo(object):
@@ -388,12 +388,12 @@ class BboDDParTravLine(BboTravLineBase):
 
         # get raw score possible for a suit and level and double situation
         # given that dd computed we can take trix number of tricks
-        def getRawScore(self, suit, level, dblFlag, pair, trix):
+        def getRawScore(self, suit, level, dblFlag, player, trix):
             downDblNotVulList = (0, 100, 300, 500, 800, 1100, 1400, 1700, 2000, 2300, 2600, 2900, 3200, 3500)
             downDblVulList    = (0, 200, 500, 800, 1100, 1400, 1700, 2000, 2300, 2600, 2900, 3200, 3500, 3800)
 
             vulIndex = self.getVulIndex()
-            isVul = vulIndex == 1 or (pair == 'NS' and vulIndex == 2) or (pair == 'EW' and vulIndex == 3)
+            isVul = vulIndex == 1 or (player in 'NS' and vulIndex == 2) or (player in 'EW' and vulIndex == 3)
             # print(suit, level+6, trix, file=sys.stderr)
             if trix < level+6:
                 # going down

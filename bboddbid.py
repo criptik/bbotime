@@ -45,10 +45,21 @@ class BboDDBidReporter(BboBase):
         # hand, ddtable and par display
         self.printHTMLOpening()
         for bdnum in range (1, self.args.boards + 1):
+            if self.args.onlyBoard is not None and bdnum != self.args.onlyBoard:
+                continue
+            print(f'\nBoard {bdnum}\n--------', file=sys.stderr)
             BboDDParTravLine.printHandPlusDDTable(bdnum)
             for tline in self.travellers[bdnum]:
-                tline.calcBiddingParList()
-            print('-----', file=sys.stderr)
+                bidParsList = tline.calcBiddingParList()
+                # print(bidParsList, file=sys.stderr)
+                parScore = 99999
+                for bidparrec in bidParsList:
+                    if bidparrec.parScore != parScore:
+                        print(bidparrec, file=sys.stderr)
+                        parScore = bidparrec.parScore
+                    else:
+                        print(bidparrec.bidString(), file=sys.stderr)
+                        
             if False:
                 self.showOptimumLeadsAllContracts(bdnum)
                 print()

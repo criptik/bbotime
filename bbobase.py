@@ -85,6 +85,7 @@ class BboBase(object):
         # note: we could detect boards per round from the data but support args overrides in case
         # but we do have some built-in defaults for common board counts
         parser.add_argument('--boards', type=int, default=None, help='total number of boards')
+        parser.add_argument('--onlyBoard', type=int, default=None, help='process only this board')
         parser.add_argument('--bpr', type=int, default=None, help='boards per round')
         parser.add_argument('--dir',  help='directory containing traveler html records')
         parser.add_argument('--robotScores', type=float, nargs='*', default=None, help='supply robot scores to help differentiate between robots which all have the same name')
