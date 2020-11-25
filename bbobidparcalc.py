@@ -41,7 +41,7 @@ class ScoreObj():
 
     def __str__(self):
         if self.level == 0:
-            return f'bd {self.bdnum}: Pass Out'
+            return f'0, Pass Out'
         ovunder = self.trix - (self.level + 6)
         ovunderStr = f'make {self.level + ovunder}' if ovunder >= 0 else f'down {-1*ovunder}'
         dblStr = ' ' if self.dblFlag == 0 else '*' * self.dblFlag
@@ -60,7 +60,7 @@ class BidParRec():
             self.textList.append(txt)
 
     def bidString(self):
-        return '-- by -: ' if self.bid is None else f'{self.bid:<2} by {self.bidder}: '
+        return 'Pre-Bid: ' if self.bid is None else f'{self.bid:<2} by {self.bidder}: '
         
     def __str__(self):
         strout = self.bidString()
@@ -179,11 +179,10 @@ class BiddingParCalc():
     def calcCurrentPar(self):
         # use trixdict to determine par contract
         # start with side making the next bid
-        if self.lastBid is None:
+        if self.bidder is None:
             # the following are for the pre-bidding calculation
-            # or until someone makes an actual bid
             pair = 'NS' if self.dealInfo.getDealerStr() in 'NS' else 'EW' 
-            scoreToBeat = ScoreObj(self.bdnum, 0, 'C', 0, pair, 0, 0)
+            self.savedScoreToBeat = scoreToBeat = ScoreObj(self.bdnum, 0, 'C', 0, pair, 0, 0)
         else:
             # select pair to be next after bidder
             pair = 'EW' if self.bidder in 'NS' else 'NS'
@@ -215,7 +214,11 @@ class BiddingParCalc():
                 testScoreToBeat = ScoreObj(self.bdnum, level, suit, dblFlag, player, trix, rawscore)
                 scoreToBeat = self.checkScoreHigher(testScoreToBeat, scoreToBeat, pair)
                 checkedDouble = True
-            for suit in rankedSuits:
+            # go thru the suits starting with the next higher over scoreToBeat
+            suitidx = rankedSuits.index(scoreToBeat.suit)
+            for n in range(5):  # 5 suits
+                suitidx = (suitidx + 1) % 5
+                suit = rankedSuits[suitidx]
                 for player in self.trixdict[pair][suit].keys():
                     trix = self.trixdict[pair][suit][player]
                     # find a level to test for this suit

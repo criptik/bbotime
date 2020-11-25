@@ -50,6 +50,7 @@ class BboDDBidReporter(BboBase):
             print(f'\nBoard {bdnum}\n--------', file=sys.stderr)
             BboDDParTravLine.printHandPlusDDTable(bdnum)
             for tline in self.travellers[bdnum]:
+                print(f'NS: {tline.north}-{tline.south} vs. EW: {tline.east}-{tline.west}', file=sys.stderr)
                 bidParsList = tline.calcBiddingParList()
                 # print(bidParsList, file=sys.stderr)
                 parScore = 99999
