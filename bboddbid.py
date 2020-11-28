@@ -47,19 +47,57 @@ class BboDDBidReporter(BboBase):
         for bdnum in range (1, self.args.boards + 1):
             if self.args.onlyBoard is not None and bdnum != self.args.onlyBoard:
                 continue
-            print(f'\nBoard {bdnum}\n--------', file=sys.stderr)
+            print(f'Board {bdnum}', file=sys.stderr)
             BboDDParTravLine.printHandPlusDDTable(bdnum)
             for tline in self.travellers[bdnum]:
-                print(f'NS: {tline.north}-{tline.south} vs. EW: {tline.east}-{tline.west}', file=sys.stderr)
+                print(f'<b>NS: {tline.north}-{tline.south} vs. EW: {tline.east}-{tline.west}</b>')
                 bidParsList = tline.calcBiddingParList()
                 # print(bidParsList, file=sys.stderr)
-                parScore = 99999
-                for bidparrec in bidParsList:
+                # find out how many par changes are in the returned list
+                parScore = bidParsList[0].parScore
+                rowsNeeded = 1
+                for bidparrec in bidParsList[1:]:
+                    if bidparrec.bidder == 'W' or bidparrec.parScore != parScore:
+                        rowsNeeded += 1
+                    parScore = bidparrec.parScore
+                cols = 5
+                rows = 1 + 1 + rowsNeeded # pre-bid and header
+                # print('rows/cols', bdnum, rows, cols, file=sys.stderr)
+                # for rec in bidParsList:
+                    # print(rec, file=sys.stderr)
+                tab = [['' for i in range(cols)] for j in range(rows)]
+
+                # now go thru list and fill out table
+                # tab[0][0] = f'<b>Init:</b>'
+                tab[1][4] = self.htmlNotesString(bidParsList[0])
+                for (col, dir) in enumerate('NESW'):
+                    tab[1][col] = f'<b>&nbsp;&nbsp;{dir}&nbsp;&nbsp;</b>'
+                tab[0][4] = f'<b>Par</b>'
+                parScore = bidParsList[0].parScore
+                row = 2
+                for bidparrec in bidParsList[1:]:
+                    col = 'NESW'.index(bidparrec.bidder)
+                    # print(bdnum, row, col, file=sys.stderr)
                     if bidparrec.parScore != parScore:
-                        print(bidparrec, file=sys.stderr)
-                        parScore = bidparrec.parScore
+                        tab[row][4] = self.htmlNotesString(bidparrec)
+                        bidPunctuation ='?'
                     else:
-                        print(bidparrec.bidString(), file=sys.stderr)
+                        bidPunctuation = ' '
+                    tab[row][col] = f'&nbsp;&nbsp;{bidparrec.bid.upper():2}{bidPunctuation}&nbsp;&nbsp;'
+                    
+                    if bidparrec.parScore != parScore or bidparrec.bidder == 'W':
+                        # print(tab[row], file=sys.stderr)
+                        row += 1
+                    parScore = bidparrec.parScore
+                        
+                tableHtml = BboBase.genHtmlTable(tab, self.args, colalignlist=('center', 'center', 'center', 'center', 'left'))
+                # fix up first row to span 4 cols
+                if False:
+                    tableHtml = re.sub('<td style="text-align: center;"', '<td colspan="4" style="text-align: right;"', tableHtml, count=1)
+                    tableHtml = re.sub('<td style="text-align: center;"></td>', '', tableHtml, count=3)
+
+                print(tableHtml)
+
                         
             if False:
                 self.showOptimumLeadsAllContracts(bdnum)
@@ -68,6 +106,16 @@ class BboDDBidReporter(BboBase):
         sys.exit(1)
         self.printHTMLClosing()
 
+    def htmlNotesString(self, bidparrec):
+        str = bidparrec.notesString()
+        strlist = list(str)
+        for (i, c) in enumerate(strlist):
+            if c == ' ':
+                strlist[i] = '&nbsp;'
+            else:
+                break
+        return ''.join(strlist)
+        
     @staticmethod
     def tlineScore(tline):
         return tline.nsScore

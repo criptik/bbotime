@@ -61,14 +61,13 @@ class BidParRec():
 
     def bidString(self):
         return 'Pre-Bid: ' if self.bid is None else f'{self.bid:<2} by {self.bidder}: '
-        
+
+    def notesString(self):
+        return f'{self.parScore:+5}, {" or ".join(self.textList)}'
+    
     def __str__(self):
         strout = self.bidString()
-        strout += f'{self.parScore:+}  '
-        for (i, score)  in enumerate(self.textList):
-            if i > 0:
-                strout += ' or '
-            strout += f'{score}'
+        strout += self.notesString()
         return strout
 
 class BiddingParCalc():
