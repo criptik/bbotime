@@ -76,10 +76,11 @@ class BboDDParTravLine(BboTravLineBase):
         s = self.linStr
         splits = re.split('\|mb\|', s)
         splits = splits[1:-1]
-        splits.append('p')
+        splits.append('P')
         # get rid of any alert parts
         for n in range(len(splits)):
             splits[n] = re.sub('\|an.*', '', splits[n])
+            splits[n] = splits[n].upper()
         # print(splits, file=sys.stderr)
         return splits
         

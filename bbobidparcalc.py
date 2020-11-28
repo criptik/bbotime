@@ -145,7 +145,7 @@ class BiddingParCalc():
     def doubleIsLegal(self, pair):
         # print('check doubIsLegal', self.lastBid, self.lastBidder, pair, file=sys.stderr)
         return(self.lastBid is not None
-               and self.lastBid not in 'dr'
+               and self.lastBid not in 'DR'
                and sideMap[self.lastBidder] != pair)
     
     # returns new scoreToBeat and affects sawChange boolean
@@ -265,7 +265,7 @@ class BiddingParCalc():
             print(file=sys.stderr)
             
     def applyBidToTrixDict(self, bid, bidder):
-        if bid in 'pdr' or len(bid) == 1:
+        if bid in 'PDR' or len(bid) == 1:
             return
         (levstr, suit) = bid
         level = int(levstr)
@@ -314,7 +314,7 @@ class BiddingParCalc():
         bidderIdx = self.dealInfo.getDealerIndex()
         for bid in bidList:
             self.bidder = 'NESW'[bidderIdx]
-            if bid != 'p':
+            if bid != 'P':
                 self.lastBid = bid
                 self.lastBidder = self.bidder
                 self.numConsecPasses = 0
