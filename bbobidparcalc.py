@@ -51,6 +51,7 @@ class BidParRec():
     def __init__(self, bid, bidder, scoreList):
         self.bid = bid
         self.bidder = bidder
+        self.scoreList = scoreList
         self.textList = []
         # extract numeric score
         self.parScore = None

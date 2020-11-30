@@ -44,24 +44,19 @@ class BidParTester(BboDDParTravLine.DealInfo):
             str += '\n'
         return str
 
-    def getDealerIndex(self):
-        return (self.bdnum-1) % 4
-            
-    def getDealerStr(self):
-        return 'NESW'[self.getDealerIndex()]
-            
-    def getVulIndex(self):
-        return [0,2,3,1,2,3,1,0,3,1,0,2,1,0,2,3][(self.bdnum-1) % 16]
-        
-    def getVulStr(self):
-        strmap = {
-            0 : 'None',
-            1 : 'Both',
-            2 : 'N/S',
-            3 : 'E/W',
-        }
-        return strmap[self.getVulIndex()]
-
+# A test is specified as a tuple with the following 4 elements:
+#   a board number (affects dealer, vulnerability, etc.)
+#   a default value for trix for any suit/player combination that is not specified
+#   a trix specifier string of one or more of the form {dir}.{suit}.{trix}
+#      dir will contain one or more of the directions (so NS.H.10 would mean both North and South can take 10 tricks at hearts)
+#   a string specifying bids and expected results parsed as follows
+#    * a number starting with + or - is a parscore which carries on until a different parscore is specified
+#      at least one beginning parscore is required.
+#    * a field in [] brackets is a set of contracts.  The contracts list is optional.
+#      If not specified, the contracts returned by the test results are not checked, only the par score is checked.
+#      If specified, it is assumed to carry on until a different contract set is specified.
+#      Generally a contract set would be specified after a parscore.
+#   * Anything else is a bid and will be added to the bidlist passed to calcParsForBidList.
 
 tests = [
     # no one making anything, should be passout
@@ -74,11 +69,11 @@ tests = [
     (1, 0, 'S.H.10 N.C.11', '+420'),
     # with EW having sacrifice at 4S pushes up to 5C
     (1, 0, 'S.H.10 N.C.11 EW.S.8', '+400'),
-    # try same thing with EW vulnerable
+    # try same thing with EW vulnerable, now sacrifice loses
     (3, 0, 'S.H.10 N.C.11 EW.S.8', '+420'),
     # similar but EW can make 9 tricks at spades
     (3, 0, 'S.H.10 N.C.11 EW.S.9', '+400'),
-    # similar but NS can only make 10 tricks at clubs
+    # similar but NS can only make 10 tricks at clubs so they have to settle for the 4S sacrifice amount
     (3, 0, 'S.H.10 N.C.10 EW.S.9', '+200'),
     # only 9 tricks at !h
     (3, 0, 'S.H.9 N.C.10 EW.S.9', '+130'),
@@ -91,10 +86,16 @@ tests = [
     # North bidding !H first, only South can make
     (1, 0, 'S.H.10 N.C.11', '+420 1H +400'),
     (1, 0, 'S.H.10 N.C.10', '+420 1H +130'),
+    (1, 0, 'S.H.10 N.H.9',  '+420 1H +140'),
     # similar but South bids clubs first as well
     (1, 0, 'S.H.10 N.C.11 S.C.9', '+420 1H +400 P 2C +110'),
     # got too high so negative par
     (1, 0, 'S.H.10 N.C.11 S.C.7', '+420 1H +400 P 2C -100'),
+    # 3N 5C dual contracts
+    (1, 0, 'NS.N.9 N.C.11', '+400 [3N-NS,5C-N]'),
+    # both sides make 3N??
+    (1, 0, 'NSEW.N.9', '+100 [4N-EW]'),
+    (2, 0, 'NSEW.N.9', '-200 [4N-NS]'),
     ]
 
 for testtup in tests:
@@ -113,22 +114,55 @@ for testtup in tests:
     # parse bidResStr to get bids and expected Results
     bidList = []
     exScores = []
+    exContracts = []
+    lastConsList = []
     parScore = 0
     exScores.append(0)
+    exContracts.append([])
     for cmd in re.split('\s+', bidResStr):
         if cmd[0] in '+-':
             parScore = int(cmd)
             # correct most recent expectedScore
             exScores[-1] = parScore
+        elif cmd[0] == '[':
+            # a list of contracts to parse
+            # format is {level}{suit}-{decl}, comma separated
+            cmd = cmd[1:-1]  # get rid of end brackets
+            # print('cmd=', cmd)
+            cons = re.split(',', cmd)
+            # print('cons=', cons)
+            lastConstList = []
+            for con in cons:
+                # print('con=', con)
+                (levsuit, decl) = con.split('-')
+                (levstr, suit) = levsuit
+                level = int(levstr)
+                myobj = (level, suit, decl)
+                lastConsList.append(myobj)
+            exContracts[-1] = lastConsList
         else:
             # cmd is a bid
             bidList.append(cmd)
             exScores.append(parScore)
+            exContracts.append(lastConsList)
             
-        
+    # print('expected stuff:', exScores, exContracts)
     
     testObj = BidParTester(bdnum, indict, trixdefault)
     calc = BiddingParCalc(bdnum, testObj)
     for (i, bidparrec) in enumerate(calc.calcParsForBidList(bidList)):
-        assert bidparrec.parScore == exScores[i], f'on test ({bdnum}, {trixdefault}, {indict}, {bidList}) result {i} got {bidparrec.parScore:+}, expected {exScores[i]:+}'
+        # print('------')
+        for obj in bidparrec.scoreList:
+            pass
+            # print(obj)
+        # print('i=', i, exScores[i], exContracts[i])
+        # see if complete match, start with score
+        testStr = f'({bdnum}, {trixdefault}, {indict}, {bidList})'
+        assert (bidparrec.parScore == exScores[i]), f'on {testStr}...\n score mismatch, expected {exScores[i]}, got {bidparrec.parScore}' 
+        # must check the contracts if any specified
+        for (j, con) in enumerate(exContracts[i]):
+            (level, suit, decl) = con
+            assert level == bidparrec.scoreList[j].level, f'on {testStr}...\n level mismatch, expected {level}, got {bidparrec.scoreList[j].level}'
+            assert suit == bidparrec.scoreList[j].suit,   f'on {testStr}...\n suit mismatch, expected {suit}, got {bidparrec.scoreList[j].suit}'
+            assert decl == bidparrec.scoreList[j].player,   f'on {testStr}...\n decl mismatch, expected {decl}, got {bidparrec.scoreList[j].player}'
       
