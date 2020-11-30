@@ -20,6 +20,14 @@ for dir in 'NSE':
     handStr = handStr[-1] + handStr[:-1]
 dummyDeal = BboDDParTravLine.Deal(hands)
 
+def doAssert(expected, got, testStr, detail):
+    try:
+        assert expected == got, str
+    except AssertionError:
+        print(f'assertion error on {testStr}')
+        print(f'{detail}, expected {expected}, got {got}')
+        sys.exit(1)
+
 class BidParTester(BboDDParTravLine.DealInfo):
     def __init__(self, bdnum, indict, default):
         # note: the pbn string here is irrelevant
@@ -96,9 +104,18 @@ tests = [
     # both sides make 3N??
     (1, 0, 'NSEW.N.9', '+100 [4N-EW]'),
     (2, 0, 'NSEW.N.9', '-200 [4N-NS]'),
-    ]
+    # part score battle where NS went too far (and EW did not double)
+    (17, 0, 'NS.C.8 NS.S.8 EW.D.8 EW.H.8 EW.N.7', '''+100 [2N-EW,3D-EW,3H-EW]
+                                                    P P 1C  P
+                                                    1S P 2N   -100 [3C-S,3S-N]
+                                                 P  3S        -100 [3S-N]
+                                                       P 4S   -300 [4S-N]
+                                                 P  P  P -100 [4S-N]
+                                                  ''')
+] 	
 
-for testtup in tests:
+for (testnum, testtup) in enumerate(tests):
+    # print(f'test #{testnum}')
     (bdnum, trixdefault, dictStr, bidResStr) = testtup
     # build up indict by parsing dictStr
     indict = {}
@@ -120,6 +137,9 @@ for testtup in tests:
     exScores.append(0)
     exContracts.append([])
     for cmd in re.split('\s+', bidResStr):
+        # print(f'<{cmd}>')
+        if len(cmd) == 0:
+            continue
         if cmd[0] in '+-':
             parScore = int(cmd)
             # correct most recent expectedScore
@@ -131,7 +151,7 @@ for testtup in tests:
             # print('cmd=', cmd)
             cons = re.split(',', cmd)
             # print('cons=', cons)
-            lastConstList = []
+            lastConsList = []
             for con in cons:
                 # print('con=', con)
                 (levsuit, decl) = con.split('-')
@@ -151,18 +171,21 @@ for testtup in tests:
     testObj = BidParTester(bdnum, indict, trixdefault)
     calc = BiddingParCalc(bdnum, testObj)
     for (i, bidparrec) in enumerate(calc.calcParsForBidList(bidList)):
-        # print('------')
+        # print(f'{i}: {bidparrec}')
         for obj in bidparrec.scoreList:
             pass
             # print(obj)
         # print('i=', i, exScores[i], exContracts[i])
         # see if complete match, start with score
-        testStr = f'({bdnum}, {trixdefault}, {indict}, {bidList})'
-        assert (bidparrec.parScore == exScores[i]), f'on {testStr}...\n score mismatch, expected {exScores[i]}, got {bidparrec.parScore}' 
+        bidStr = 'Pre-Bid' if (i == 0) else f'after bid {bidList[i-1]}'
+        testStr = f'test# {testnum}, ({bdnum}, {trixdefault}, {indict}), {bidStr}'
+        doAssert(bidparrec.parScore, exScores[i], testStr, 'parScore')
         # must check the contracts if any specified
-        for (j, con) in enumerate(exContracts[i]):
-            (level, suit, decl) = con
-            assert level == bidparrec.scoreList[j].level, f'on {testStr}...\n level mismatch, expected {level}, got {bidparrec.scoreList[j].level}'
-            assert suit == bidparrec.scoreList[j].suit,   f'on {testStr}...\n suit mismatch, expected {suit}, got {bidparrec.scoreList[j].suit}'
-            assert decl == bidparrec.scoreList[j].player,   f'on {testStr}...\n decl mismatch, expected {decl}, got {bidparrec.scoreList[j].player}'
-      
+        if len(exContracts[i]) > 0:
+            doAssert(len(exContracts[i]), len(bidparrec.scoreList), testStr, 'number of contracts')
+            for (j, con) in enumerate(exContracts[i]):
+                (level, suit, decl) = con
+                doAssert(level, bidparrec.scoreList[j].level, testStr, f'level[{j}]')
+                doAssert(suit,  bidparrec.scoreList[j].suit,  testStr, f'suit[{j}]')
+                doAssert(decl,  bidparrec.scoreList[j].player, testStr, f'declarer[{j}]')
+
