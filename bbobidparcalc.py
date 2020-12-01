@@ -11,7 +11,7 @@ def nested_dict():
 rankedSuits = 'CDHSN'
 sideMap = {'E':'EW', 'W':'EW', 'EW':'EW', 'N':'NS', 'S':'NS', 'NS':'NS'}
 
-DEBUG=True
+DEBUG=False
 
 def dbgprint(*args):
     if DEBUG:
