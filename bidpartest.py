@@ -10,7 +10,7 @@ from pprint import pprint
 import re
 # from bbobase import BboBase
 from bboddpartravline import BboDDParTravLine
-from bbobidparcalc import BiddingParCalc
+import bbobidparcalc
 
 
 hands = {}
@@ -56,8 +56,10 @@ import argparse
 
 parser = argparse.ArgumentParser('bid par tester')
 parser.add_argument('--only', type=int, default=None, help='only run this test')
+parser.add_argument('--debug', default=False, action='store_true', help='print some debug info') 
 args = parser.parse_args()
-
+if args.debug:
+    bbobidparcalc.DEBUG=True
 # A test is specified as a tuple with the following 4 elements:
 #   a board number (affects dealer, vulnerability, etc.)
 #   a default value for trix for any suit/player combination that is not specified
@@ -125,10 +127,10 @@ tests = [
     # test redouble
     (1, 0, 'NSEW.N.7', '+90 1N D +100 [2N-EW] R P P P +560 [1N-N]'),
     # test redouble
-    (1, 0, 'NS.N.7', '+90 1N D +180 [1N-N] R +560 [1N-N] P P P'),
+    (1, 0, 'NS.N.7', '+90 1N D +560 [1N-N] R P P P'),
     # test best bid being redouble
     # not working yet
-    # (1, 0, 'NS.N.7', '+90 1N D +560 [1N-N] P P P'),
+     (1, 0, 'NS.N.7', '+90 1N D +560 [1N-N] P P P +180 [1N-N]'),
     
 ] 	
 
@@ -190,7 +192,7 @@ for (testnum, testtup) in enumerate(tests):
     # print('expected stuff:', exScores, exContracts)
     
     testObj = BidParTester(bdnum, indict, trixdefault)
-    calc = BiddingParCalc(bdnum, testObj)
+    calc = bbobidparcalc.BiddingParCalc(bdnum, testObj)
     for (i, bidparrec) in enumerate(calc.calcParsForBidList(bidList)):
         # print(f'{i}: {bidparrec}')
         for obj in bidparrec.scoreList:

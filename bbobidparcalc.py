@@ -200,7 +200,7 @@ class BiddingParCalc():
             noChangeCount = 0
             self.sawChange = True # so first one gets printed
             checkedDouble = False
-            checkedRedouble = True # avoid for now has bug
+            checkedRedouble = False # avoid for now has bug
         while not finished:
             if True or self.sawChange:
                 dbgprint(f'current side is {pair}, scoreToBeat is {scoreToBeat}')
@@ -270,6 +270,7 @@ class BiddingParCalc():
             if self.isNextToFinalPass() and not self.sawChange:
                 finished = True
             else:
+                # flip sides
                 pair = 'NS' if pair == 'EW' else 'EW'
                 noChangeCount = 0 if self.sawChange else noChangeCount + 1
                 # print('sawChange: ', self.sawChange, noChangeCount, file=sys.stderr)
@@ -277,10 +278,15 @@ class BiddingParCalc():
                     finished = True 
 
         # finished, show bestScores
-        if len(self.bestScoreList) == 0:
-            self.bestScoreList.append(self.savedScoreToBeat)
+        newscore = self.bestScoreList[0].rawscore if len(self.bestScoreList) > 0 else -1111
+        dbgprint(f'len={len(self.bestScoreList)}, new={newscore}, start={startingPair}, saved={self.savedScoreToBeat}')
+        if (len(self.bestScoreList) == 0 or (self.isNextToFinalPass() and (
+                startingPair == 'NS' and self.savedScoreToBeat.rawscore > self.bestScoreList[0].rawscore
+                or startingPair == 'EW' and self.savedScoreToBeat.rawscore < self.bestScoreList[0].rawscore))):
+            self.bestScoreList = [self.savedScoreToBeat]
+            
         if DEBUG:
-            print(f'bestScoreList: {self.bestScoreList[0].rawscore} (saved={self.savedScoreToBeat}, start={startingPair})', end='', file=sys.stderr)
+            print(f'bestScoreList: start={startingPair}: ', end='', file=sys.stderr)
             for score in self.bestScoreList:
                 print(score, end=', ', file=sys.stderr)
             print(file=sys.stderr)
@@ -333,7 +339,7 @@ class BiddingParCalc():
         self.addToBidParsList()
         dbgprint(f'bd:{self.bdnum}, bids={bidList}')
         bidderIdx = self.dealInfo.getDealerIndex()
-        for bid in bidList:
+        for (bidnum, bid) in enumerate(bidList):
             self.bidder = 'NESW'[bidderIdx]
             if bid != 'P':
                 self.lastBid = bid
@@ -342,7 +348,7 @@ class BiddingParCalc():
             else:
                 self.numConsecPasses += 1
                 
-            dbgprint(f'processing bid {bid} by {self.bidder}')
+            dbgprint(f'processing bid[{bidnum+1}] {bid} by {self.bidder}')
             self.applyBidToTrixDict(bid, self.bidder)
             # calculate scoreToBeat for next calcCurrentPar call
             if len(bid) > 1:
