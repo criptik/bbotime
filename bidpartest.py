@@ -26,7 +26,7 @@ def doAssert(expected, got, testStr, detail):
     except AssertionError:
         print(f'assertion error on {testStr}')
         print(f'{detail}, expected {expected}, got {got}')
-        sys.exit(1)
+        # sys.exit(1)
 
 class BidParTester(BboDDParTravLine.DealInfo):
     def __init__(self, bdnum, indict, default):
@@ -51,6 +51,12 @@ class BidParTester(BboDDParTravLine.DealInfo):
                 str += f'{self.getDDTricks(suit, dir):2} '
             str += '\n'
         return str
+
+import argparse
+
+parser = argparse.ArgumentParser('bid par tester')
+parser.add_argument('--only', type=int, default=None, help='only run this test')
+args = parser.parse_args()
 
 # A test is specified as a tuple with the following 4 elements:
 #   a board number (affects dealer, vulnerability, etc.)
@@ -111,10 +117,24 @@ tests = [
                                                  P  3S        -100 [3S-N]
                                                        P 4S   -300 [4S-N]
                                                  P  P  P -100 [4S-N]
-                                                  ''')
+                                                  '''),
+    # both sides can make 1NT, but passed out
+    (1, 7, '', '+90 P -90 P +90 P -90 P +0'),
+    # test double
+    (1, 0, 'NSEW.N.7', '+90 1N D +100 [2N-EW] P P +180 [1N-N] P'),
+    # test redouble
+    (1, 0, 'NSEW.N.7', '+90 1N D +100 [2N-EW] R P P P +560 [1N-N]'),
+    # test redouble
+    (1, 0, 'NS.N.7', '+90 1N D +180 [1N-N] R +560 [1N-N] P P P'),
+    # test best bid being redouble
+    # not working yet
+    # (1, 0, 'NS.N.7', '+90 1N D +560 [1N-N] P P P'),
+    
 ] 	
 
 for (testnum, testtup) in enumerate(tests):
+    if args.only is not None and testnum != args.only:
+        continue
     # print(f'test #{testnum}')
     (bdnum, trixdefault, dictStr, bidResStr) = testtup
     # build up indict by parsing dictStr
@@ -149,16 +169,17 @@ for (testnum, testtup) in enumerate(tests):
             # format is {level}{suit}-{decl}, comma separated
             cmd = cmd[1:-1]  # get rid of end brackets
             # print('cmd=', cmd)
-            cons = re.split(',', cmd)
-            # print('cons=', cons)
             lastConsList = []
-            for con in cons:
-                # print('con=', con)
-                (levsuit, decl) = con.split('-')
-                (levstr, suit) = levsuit
-                level = int(levstr)
-                myobj = (level, suit, decl)
-                lastConsList.append(myobj)
+            if len(cmd) != 0:
+                cons = re.split(',', cmd)
+                # print('cons=', cons)
+                for con in cons:
+                    # print('con=', con)
+                    (levsuit, decl) = con.split('-')
+                    (levstr, suit) = levsuit
+                    level = int(levstr)
+                    myobj = (level, suit, decl)
+                    lastConsList.append(myobj)
             exContracts[-1] = lastConsList
         else:
             # cmd is a bid
@@ -177,9 +198,9 @@ for (testnum, testtup) in enumerate(tests):
             # print(obj)
         # print('i=', i, exScores[i], exContracts[i])
         # see if complete match, start with score
-        bidStr = 'Pre-Bid' if (i == 0) else f'after bid {bidList[i-1]}'
-        testStr = f'test# {testnum}, ({bdnum}, {trixdefault}, {indict}), {bidStr}'
-        doAssert(bidparrec.parScore, exScores[i], testStr, 'parScore')
+        bidStr = 'Pre-Bid' if (i == 0) else f'after bid[{i}]={bidList[i-1]}'
+        testStr = f'test# {testnum}, ({bdnum}, {trixdefault}, {dictStr}, {bidResStr}), {bidStr}'
+        doAssert(exScores[i], bidparrec.parScore, testStr, 'parScore')
         # must check the contracts if any specified
         if len(exContracts[i]) > 0:
             doAssert(len(exContracts[i]), len(bidparrec.scoreList), testStr, 'number of contracts')

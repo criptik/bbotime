@@ -413,7 +413,7 @@ class BboDDParTravLine(BboTravLineBase):
                 overtrix = (trix-6) - level
                 ptsPerTrick = 20 if suit in 'DC' else 30
                 trickOneBonus = 10 if suit == 'N' else 0
-                bidTrickVal = trickOneBonus + level * ptsPerTrick * (2 ** dblFlag)
+                bidTrickVal = (trickOneBonus + level * ptsPerTrick) * (2 ** dblFlag)
                 if dblFlag == 0:
                     overTrickVal = overtrix * ptsPerTrick
                 else:

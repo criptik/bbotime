@@ -11,7 +11,7 @@ def nested_dict():
 rankedSuits = 'CDHSN'
 sideMap = {'E':'EW', 'W':'EW', 'EW':'EW', 'N':'NS', 'S':'NS', 'NS':'NS'}
 
-DEBUG=False
+DEBUG=True
 
 def dbgprint(*args):
     if DEBUG:
@@ -149,11 +149,15 @@ class BiddingParCalc():
                and self.lastBid not in 'DR'
                and sideMap[self.lastBidder] != pair)
     
+    def redoubleIsLegal(self, pair):
+        return(self.lastBid == 'D'
+               and sideMap[self.lastBidder] != pair)
+    
     # returns new scoreToBeat and affects sawChange boolean
     def checkScoreHigher(self, testScoreToBeat, scoreToBeat, pair):
         oldScore = scoreToBeat.rawscore
         if self.scoreIsBetter(oldScore, testScoreToBeat.rawscore, sideMap[pair]):
-            dbgprint('scoreIsBetter: ', testScoreToBeat, scoreToBeat)
+            dbgprint(f'scoreIsBetter: {testScoreToBeat} > {scoreToBeat}, saved={self.savedScoreToBeat}')
             self.bestScoreList = [testScoreToBeat]
             self.sawChange = True
             return testScoreToBeat
@@ -187,6 +191,7 @@ class BiddingParCalc():
             # select pair to be next after bidder
             pair = 'EW' if self.bidder in 'NS' else 'NS'
             scoreToBeat = self.savedScoreToBeat
+        startingPair = pair
         self.bestScoreList = []
         if self.isPassedOut():
             finished = True
@@ -195,6 +200,7 @@ class BiddingParCalc():
             noChangeCount = 0
             self.sawChange = True # so first one gets printed
             checkedDouble = False
+            checkedRedouble = True # avoid for now has bug
         while not finished:
             if True or self.sawChange:
                 dbgprint(f'current side is {pair}, scoreToBeat is {scoreToBeat}')
@@ -205,6 +211,8 @@ class BiddingParCalc():
             if self.doubleIsLegal(pair) and not checkedDouble:
                 # compute scoreToBeat doubled
                 dblFlag = 1  # meaning doubled
+                self.lastNormalBid = self.lastBid
+                self.lastNormalBidder = self.lastBidder
                 (level, suit) = self.lastBid
                 level = int(level)
                 player = self.declMap[sideMap[self.lastBidder]][suit]
@@ -214,6 +222,18 @@ class BiddingParCalc():
                 testScoreToBeat = ScoreObj(self.bdnum, level, suit, dblFlag, player, trix, rawscore)
                 scoreToBeat = self.checkScoreHigher(testScoreToBeat, scoreToBeat, pair)
                 checkedDouble = True
+            elif self.redoubleIsLegal(pair) and not checkedRedouble:
+                # compute scoreToBeat redoubled
+                dblFlag = 2  # meaning doubled
+                (level, suit) = self.lastNormalBid
+                level = int(level)
+                player = self.declMap[sideMap[self.lastNormalBidder]][suit]
+                trix = self.trixdict[sideMap[player]][suit][player]
+                dbgprint('Testing Redouble', pair, suit, level, dblFlag, player, trix)
+                rawscore = self.getRawScoreSigned(suit, level, dblFlag, player, trix)
+                testScoreToBeat = ScoreObj(self.bdnum, level, suit, dblFlag, player, trix, rawscore)
+                scoreToBeat = self.checkScoreHigher(testScoreToBeat, scoreToBeat, pair)
+                checkedRedouble = True
             # go thru the suits starting with the next higher over scoreToBeat
             suitidx = rankedSuits.index(scoreToBeat.suit)
             for n in range(5):  # 5 suits
@@ -260,7 +280,7 @@ class BiddingParCalc():
         if len(self.bestScoreList) == 0:
             self.bestScoreList.append(self.savedScoreToBeat)
         if DEBUG:
-            print('bestScoreList: ', end='', file=sys.stderr)
+            print(f'bestScoreList: {self.bestScoreList[0].rawscore} (saved={self.savedScoreToBeat}, start={startingPair})', end='', file=sys.stderr)
             for score in self.bestScoreList:
                 print(score, end=', ', file=sys.stderr)
             print(file=sys.stderr)
@@ -328,11 +348,18 @@ class BiddingParCalc():
             if len(bid) > 1:
                 (levstr, suit) = bid
                 level = int(levstr)
-                pair = 'NS' if self.bidder in 'NS' else 'EW'
                 player = self.declMap[sideMap[self.bidder]][suit]
                 trix = self.dealInfo.getDDTricks(suit, player)
                 rawscore = self.getRawScoreSigned(suit, level, 0, player, trix)
                 self.savedScoreToBeat = ScoreObj(self.bdnum, level, suit, 0, player, trix, rawscore)
+            elif bid in 'DR':
+                level = self.savedScoreToBeat.level
+                suit  = self.savedScoreToBeat.suit
+                player = self.savedScoreToBeat.player
+                trix = self.savedScoreToBeat.trix
+                dblflag = 1 if bid == 'D' else 2
+                rawscore = self.getRawScoreSigned(suit, level, dblflag, player, trix)
+                self.savedScoreToBeat = ScoreObj(self.bdnum, level, suit, dblflag, player, trix, rawscore)
 
             self.calcCurrentPar()
             self.addToBidParsList()
