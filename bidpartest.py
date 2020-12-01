@@ -110,27 +110,27 @@ tests = [
     # 3N 5C dual contracts
     (1, 0, 'NS.N.9 N.C.11', '+400 [3N-NS,5C-N]'),
     # both sides make 3N??
-    (1, 0, 'NSEW.N.9', '+100 [4N-EW]'),
-    (2, 0, 'NSEW.N.9', '-200 [4N-NS]'),
+    (1, 0, 'NSEW.N.9', '+100 [4N*-EW]'),
+    (2, 0, 'NSEW.N.9', '-200 [4N*-NS]'),
     # part score battle where NS went too far (and EW did not double)
-    (17, 0, 'NS.C.8 NS.S.8 EW.D.8 EW.H.8 EW.N.7', '''+100 [2N-EW,3D-EW,3H-EW]
+    (17, 0, 'NS.C.8 NS.S.8 EW.D.8 EW.H.8 EW.N.7', '''+100 [2N*-EW,3D*-EW,3H*-EW]
                                                     P P 1C  P
-                                                    1S P 2N   -100 [3C-S,3S-N]
-                                                 P  3S        -100 [3S-N]
-                                                       P 4S   -300 [4S-N]
+                                                    1S P 2N   -100 [3C*-S,3S*-N]
+                                                 P  3S        -100 [3S*-N]
+                                                       P 4S   -300 [4S*-N]
                                                  P  P  P -100 [4S-N]
                                                   '''),
     # both sides can make 1NT, but passed out
     (1, 7, '', '+90 P -90 P +90 P -90 P +0'),
     # test double
-    (1, 0, 'NSEW.N.7', '+90 1N D +100 [2N-EW] P P +180 [1N-N] P'),
+    (1, 0, 'NSEW.N.7', '+90 1N D +100 [2N*-EW] P P +180 [1N*-N] P'),
     # test redouble
-    (1, 0, 'NSEW.N.7', '+90 1N D +100 [2N-EW] R P P P +560 [1N-N]'),
+    (1, 0, 'NSEW.N.7', '+90 1N D +100 [2N*-EW] R P P P +560 [1N**-N]'),
     # test redouble
-    (1, 0, 'NS.N.7', '+90 1N D +560 [1N-N] R P P P'),
+    (1, 0, 'NS.N.7', '+90 1N D +560 [1N**-N] R P P P'),
     # test best bid being redouble
     # not working yet
-     (1, 0, 'NS.N.7', '+90 1N D +560 [1N-N] P P P +180 [1N-N]'),
+     (1, 0, 'NS.N.7', '+90 1N D +560 [1N**-N] P P P +180 [1N*-N]'),
     
 ] 	
 
@@ -178,9 +178,10 @@ for (testnum, testtup) in enumerate(tests):
                 for con in cons:
                     # print('con=', con)
                     (levsuit, decl) = con.split('-')
-                    (levstr, suit) = levsuit
-                    level = int(levstr)
-                    myobj = (level, suit, decl)
+                    level = int(levsuit[0])
+                    suit = levsuit[1]
+                    dblFlag = 2 if levsuit.endswith('**') else 1 if levsuit.endswith('*') else 0
+                    myobj = (level, suit, dblFlag, decl)
                     lastConsList.append(myobj)
             exContracts[-1] = lastConsList
         else:
@@ -207,8 +208,9 @@ for (testnum, testtup) in enumerate(tests):
         if len(exContracts[i]) > 0:
             doAssert(len(exContracts[i]), len(bidparrec.scoreList), testStr, 'number of contracts')
             for (j, con) in enumerate(exContracts[i]):
-                (level, suit, decl) = con
+                (level, suit, dblFlag, decl) = con
                 doAssert(level, bidparrec.scoreList[j].level, testStr, f'level[{j}]')
                 doAssert(suit,  bidparrec.scoreList[j].suit,  testStr, f'suit[{j}]')
+                doAssert(dblFlag,  bidparrec.scoreList[j].dblFlag,  testStr, f'dblFlag[{j}]')
                 doAssert(decl,  bidparrec.scoreList[j].player, testStr, f'declarer[{j}]')
 
