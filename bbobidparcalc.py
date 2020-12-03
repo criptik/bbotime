@@ -75,7 +75,6 @@ class BiddingParCalc():
     def __init__(self, bdnum, dealInfo):
         self.bdnum = bdnum
         self.dealInfo = dealInfo
-
     
     @staticmethod
     def startingLevel(suit, trix):
@@ -91,6 +90,7 @@ class BiddingParCalc():
             return 1
         
     @staticmethod
+    # compare if other is better than orig
     def scoreIsBetter(orig, other, pair):
         if pair == 'NS':
             return other > orig
@@ -98,11 +98,13 @@ class BiddingParCalc():
             return other < orig
 
     @staticmethod
-    def contractHigher(origlevel, origsuit, testlevel, testsuit):
+    def higherContractThan(origlevel, origsuit, testsuit):
+        if origlevel == 0:
+            return 1
         if suitIndex(testsuit) > suitIndex(origsuit):
-            return testlevel >= origlevel
+            return origlevel
         else:
-            return testlevel > origlevel
+            return origlevel + 1
 
     # this gets the "Par Raw Score", i.e. where the other side
     # always doubles if it's going down and never doubles if it's making, etc.
@@ -157,8 +159,9 @@ class BiddingParCalc():
     def checkScoreHigher(self, testScoreToBeat, scoreToBeat, pair):
         oldScore = scoreToBeat.rawscore
         if self.scoreIsBetter(oldScore, testScoreToBeat.rawscore, sideMap[pair]):
-            dbgprint(f'scoreIsBetter: {testScoreToBeat} > {scoreToBeat}, saved={self.savedScoreToBeat}')
+            dbgprint(f'scoreIsBetter: {testScoreToBeat} vs. {scoreToBeat}, saved={self.savedScoreToBeat}')
             self.bestScoreList = [testScoreToBeat]
+            self.scoreToBeatBySide[pair] = testScoreToBeat
             self.sawChange = True
             return testScoreToBeat
         elif oldScore == testScoreToBeat.rawscore:
@@ -172,16 +175,21 @@ class BiddingParCalc():
             else:
                 dbgprint('scoreIsSame: ', testScoreToBeat, scoreToBeat)
                 self.bestScoreList.append(testScoreToBeat)
+                self.scoreToBeatBySide[pair] = testScoreToBeat
                 self.sawChange = True
                 # return first one, not last one
                 return self.bestScoreList[0] 
-
+        else:
+            pass
+            # dbgprint(f'scoreNOTBetter: {testScoreToBeat} vs. {scoreToBeat}')
+            
         # if we got this far, no change due to this comparison
         # dbgprint('scoreIsNOTBetter: ', testScoreToBeat, scoreToBeat)
         return scoreToBeat
     
     def calcCurrentPar(self):
         # use trixdict to determine par contract
+        self.scoreToBeatBySide = {}
         # start with side making the next bid
         if self.bidder is None:
             # the following are for the pre-bidding calculation
@@ -243,12 +251,17 @@ class BiddingParCalc():
                     trix = self.trixdict[pair][suit][player]
                     # find a level to test for this suit
                     level =  1 if trix <= 6 else self.startingLevel(suit, trix)
-                    while not self.contractHigher(scoreToBeat.level, scoreToBeat.suit, level, suit):
-                        # print('Contract is not higher:', level, suit, scoreToBeat, file=sys.stderr)
-                        level += 1
-                        if level == 8:
-                            break
+                    # We must always be higher than the highest scoreToBeat from the other side 
+                    # and we must always be higher than  (or equal to) the last level-suit bid
+                    otherSide = 'EW' if pair == 'NS' else 'NS'
+                    scoreToBeatOtherSide = self.scoreToBeatBySide.get(otherSide)
+                    savedSide = sideMap[self.savedScoreToBeat.player]
+                    if not (pair == savedSide and suit == self.savedScoreToBeat.suit):
+                        level = max(level, self.higherContractThan(self.savedScoreToBeat.level, self.savedScoreToBeat.suit, suit))
+                    if scoreToBeatOtherSide is not None:
+                        level = max(level, self.higherContractThan(scoreToBeatOtherSide.level, scoreToBeatOtherSide.suit, suit))
                             
+                    dbgprint('will be trying contract:', level, suit)
                     if level < 8:
                         rawscore = self.getParRawScore(suit, level, player, trix)
                         dblFlag = 1 if trix < level+6 else 0
@@ -280,9 +293,9 @@ class BiddingParCalc():
         # finished, show bestScores
         newscore = self.bestScoreList[0].rawscore if len(self.bestScoreList) > 0 else -1111
         dbgprint(f'len={len(self.bestScoreList)}, new={newscore}, start={startingPair}, saved={self.savedScoreToBeat}')
-        if (len(self.bestScoreList) == 0 or (self.isNextToFinalPass() and (
-                startingPair == 'NS' and self.savedScoreToBeat.rawscore > self.bestScoreList[0].rawscore
-                or startingPair == 'EW' and self.savedScoreToBeat.rawscore < self.bestScoreList[0].rawscore))):
+        if len(self.bestScoreList) == 0:
+            self.bestScoreList = [self.savedScoreToBeat]
+        elif (self.isNextToFinalPass() and self.scoreIsBetter(self.bestScoreList[0].rawscore, self.savedScoreToBeat.rawscore, startingPair)):
             self.bestScoreList = [self.savedScoreToBeat]
             
         if DEBUG:

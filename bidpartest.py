@@ -121,7 +121,7 @@ tests = [
                                                  P  P  P -100 [4S-N]
                                                   '''),
     # both sides can make 1NT, but passed out
-    (1, 7, '', '+90 P -90 P +90 P -90 P +0'),
+    (1, 7, '', '+90 [1N-NS] P -90 [1N-EW]  P +90 [1N-NS] P -90 [1N-EW] P +0 []'),
     # test double
     (1, 0, 'NSEW.N.7', '+90 1N D +100 [2N*-EW] P P +180 [1N*-N] P'),
     # test redouble
@@ -129,15 +129,16 @@ tests = [
     # test redouble
     (1, 0, 'NS.N.7', '+90 1N D +560 [1N**-N] R P P P'),
     # test best bid being redouble
-    # not working yet
-     (1, 0, 'NS.N.7', '+90 1N D +560 [1N**-N] P P P +180 [1N*-N]'),
-    
+    (1, 0, 'NS.N.7', '+90 1N D +560 [1N**-N] P P P +180 [1N*-N]'),
+    # exposed bug where seeing 5C +400 blocked 3N +430
+    (1, 0, 'N.C.11 S.C.10 NS.D.10 NS.H.8 NS.S.9 N.N.10 S.N.9', '+430 [3N-N] 1N P 2C P 2D P 3N P P P')
 ] 	
 
 for (testnum, testtup) in enumerate(tests):
     if args.only is not None and testnum != args.only:
         continue
-    # print(f'test #{testnum}')
+    if args.debug:
+        print(f'test #{testnum}', file=sys.stderr)
     (bdnum, trixdefault, dictStr, bidResStr) = testtup
     # build up indict by parsing dictStr
     indict = {}
@@ -202,7 +203,7 @@ for (testnum, testtup) in enumerate(tests):
         # print('i=', i, exScores[i], exContracts[i])
         # see if complete match, start with score
         bidStr = 'Pre-Bid' if (i == 0) else f'after bid[{i}]={bidList[i-1]}'
-        testStr = f'test# {testnum}, ({bdnum}, {trixdefault}, {dictStr}, {bidResStr}), {bidStr}'
+        testStr = f'test# {testnum}, ({bdnum}, {trixdefault}, "{dictStr}", "{bidResStr}"), {bidStr}'
         doAssert(exScores[i], bidparrec.parScore, testStr, 'parScore')
         # must check the contracts if any specified
         if len(exContracts[i]) > 0:
