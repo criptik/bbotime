@@ -80,6 +80,7 @@ class BboDDParTravLine(BboTravLineBase):
         # get rid of any alert parts
         for n in range(len(splits)):
             splits[n] = re.sub('\|an.*', '', splits[n])
+            splits[n] = re.sub('%21', '', splits[n])
             splits[n] = splits[n].upper()
         # print(splits, file=sys.stderr)
         return splits

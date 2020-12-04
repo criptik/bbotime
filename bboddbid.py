@@ -17,6 +17,7 @@ import hands
 
 from bbobase import BboBase
 from bboddpartravline import BboDDParTravLine
+import bbobidparcalc
 
 def nested_dict():
     return collections.defaultdict(nested_dict)
@@ -32,6 +33,9 @@ class BboDDBidReporter(BboBase):
 
     def childGenReport(self):
         BboDDParTravLine.importArgs(self.args)
+        if self.args.debug:
+            bbobidparcalc.DEBUG = True
+            
         self.travellers = {}
 
         for bdnum in range (1, self.args.boards + 1):
