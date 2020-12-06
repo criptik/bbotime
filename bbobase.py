@@ -438,10 +438,8 @@ class TravParserCsv(TravParserBase):
         # look in that for a #Boards line
         fname = self.getCsvFileName()
         with open(fname, 'r') as read_obj:
-            print(read_obj)
             line = next(read_obj).rstrip()
             while line:
-                print(line)
                 fields = line.split(',')
                 if fields[0] == '#BoardCount':
                     return int(fields[1])
@@ -466,13 +464,10 @@ class TravParserCsv(TravParserBase):
                 if found:
                     travlines.append(line.lstrip('#'))
                 if line == '#TravellerLines':
-                    print('start appending next line')
                     found = True
                 if found and (line == '' or line == '#Substitutions'):
-                    print('stop appending')
                     break
 
-        print('last line is', travlines[-1])
         # now travlines can be read by csvreader
         csv_reader = csv.DictReader(travlines)
         # Iterate over each row after the header in the csv

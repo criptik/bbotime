@@ -17,6 +17,8 @@ import hands
 
 from bbobase import BboBase
 from bboddpartravline import BboDDParTravLine
+from bboddbid import BboDDBidReporter
+from bboddplay import BboDDPlayReporter
 
 def nested_dict():
     return collections.defaultdict(nested_dict)
@@ -33,7 +35,8 @@ class BboDDParReporter(BboBase):
         BboDDParTravLine.importArgs(self.args)
         self.travellers = {}
 
-        for bdnum in range (1, self.args.boards + 1):
+        boardList = range (1, self.args.boards + 1) if self.args.onlyBoard is None else [self.args.onlyBoard]
+        for bdnum in boardList:
             self.travellers[bdnum] = []
             for row in self.travTableData[bdnum]:
                 tline = BboDDParTravLine(bdnum, row, self.travParser)
@@ -43,11 +46,18 @@ class BboDDParReporter(BboBase):
 
         # hand, ddtable and par display
         self.printHTMLOpening()
-        for bdnum in range (1, self.args.boards + 1):
+        bidReporter = BboDDBidReporter()
+        playReporter = BboDDPlayReporter()
+        bidReporter.args = playReporter.args = self.args
+        for bdnum in boardList:
             BboDDParTravLine.printHandPlusDDTable(bdnum)
             self.showOptimumLeadsAllContracts(bdnum)
             print()
             self.printResultsTable(bdnum)
+            for tline in sorted(self.travellers[bdnum], reverse=True, key=self.tlineScore):
+                bidReporter.printBidDetailsTable(tline)
+                playReporter.printPlayDetailsTable(bdnum, tline)
+                pass
         self.printHTMLClosing()
 
     @staticmethod
@@ -55,7 +65,7 @@ class BboDDParReporter(BboBase):
         return tline.nsScore
     
     def printResultsTable(self, bdnum):
-        print()
+        print('<b>')
         numResults = len(self.travellers[bdnum])
         rows = numResults
         cols = 8
@@ -66,10 +76,11 @@ class BboDDParReporter(BboBase):
         
         for tline in sorted(self.travellers[bdnum], reverse=True, key=self.tlineScore):
             tab[r][0:2] = [f'{tline.north}-{tline.south}&nbsp;', f'{tline.east}-{tline.west}&nbsp;']
-            tab[r][2:4] = [f'{tline.resultStr}&nbsp;', f'{tline.nsPoints}&nbsp;', f'{tline.nsScore:5.2f}%', '']
+            tab[r][2:4] = [f'{tline.resultStr}&nbsp;', f'{tline.nsPoints}&nbsp;', f'{tline.nsScore:5.2f}%&nbsp;', f'{(100-tline.nsScore):5.2f}%&nbsp;']
             tab[r][-1] = tline.replayButtonHtml()
             r += 1
         print(BboBase.genHtmlTable(tab, self.args, colalignlist=calist))
+        print('</b>')
 
     def showOptimumLeadsAllContracts(self, bdnum):
         print('Optimum Leads for Bid Contracts')
@@ -137,4 +148,5 @@ class BboDDParReporter(BboBase):
 
 #-------- main stuff starts here -----------
 
-BboDDParReporter().genReport()
+if __name__ == '__main__':
+    BboDDParReporter().genReport()

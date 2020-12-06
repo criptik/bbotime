@@ -148,13 +148,16 @@ class BboDDParTravLine(BboTravLineBase):
     def declColor(self):
         return 'cyan'
 
+    def dummyColor(self):
+        return 'chartreuse'
+    
     def defenderColor(self, dirLetter):
         return 'pink' if dirLetter in 'NE' else 'orange'
 
     def colorForDir(self, myLetter):
         myIndex = 'NESW'.index(myLetter)
         pardLetter = 'NESW'[(myIndex + 2) % 4]
-        myColor = self.declColor() if self.decl == myLetter else None if self.decl == pardLetter else self.defenderColor(myLetter)
+        myColor = self.declColor() if self.decl == myLetter else self.dummyColor() if self.decl == pardLetter else self.defenderColor(myLetter)
         return myColor
         
     def coloredName(self, myLetter):
@@ -164,11 +167,21 @@ class BboDDParTravLine(BboTravLineBase):
         myStyledName = myName if myColor is None else f'<span style="background-color:{myColor}">{myName}</span>'
         return myStyledName
 
+    def summaryLine(self):
+        if self.contract is None:
+            # special case for pass-out or AVG
+            return(f"<b>Board {bdnum}, NS:{self.north}-{self.south} vs EW:{self.east}-{self.west}, {self.resultStr}</b>")
+        else:
+            # normal contract with tricks, etc.
+            nsScore = self.nsScore
+            ewScore = 100 - nsScore
+            return f"<b>Board {self.bdnum}, NS:{self.coloredName('N')}-{self.coloredName('S')} ({nsScore:.2f}%)  vs EW:{self.coloredName('E')}-{self.coloredName('W')} ({ewScore:.2f}%), {self.resultStr}, NS:{self.nsPoints}</b>"
+        
 
     def replayButtonHtml(self):
         return f'&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://dds.bridgewebs.com/bsol2/ddummy.htm?club=us_tomdeneau&lin={self.linStr}" target="_blank" class="button">Replay It</a>'
 
-    def formatPlayAnalysis(self):
+    def formatPlayAnalysis(self, addReplayButton):
         # functions.PrintPBNPlay(ctypes.pointer(DDplayPBN), ctypes.pointer(solved))
         print(f'DD Expected Tricks: {self.solvedPlayContents.tricks[0]}')
         numPlays = self.solvedPlayContents.number
@@ -181,15 +194,16 @@ class BboDDParTravLine(BboTravLineBase):
         # now go thru and adjust the ones that involve trick count changes
         # now go thru and adjust the ones that involve trick count changes
         lasttrix = self.solvedPlayContents.tricks[0]
-        # put in the replay it button in first row, last col
-        tab[0][-1] = self.replayButtonHtml()
+        if addReplayButton:
+            # put in the replay it button in first row, last col
+            tab[0][-1] = self.replayButtonHtml()
         # go thru solvedPlayContents
         rowLeader = None
         for i in range(1, numPlays):
             psidx = 2*(i-1)
             cellCard = self.playString[psidx : psidx+2]
             (cellSuit, cellRank) = cellCard
-            cellCardLead = ''  if self.args.playTricksLeftRight else '&nbsp;' # add leading space sometimes
+            cellCardLead = ''  if self.args.playTricksLeftRight else '&nbsp;&nbsp;' # add leading space sometimes
             # first in trick/row, determine leader
             r = (i-1)//4
             if (i-1)%4 == 0:
@@ -198,7 +212,7 @@ class BboDDParTravLine(BboTravLineBase):
                 if self.args.playTricksLeftRight:
                     tab[r][0] = f'{rowLeader}<sub>&nbsp;&nbsp</sub>'
                 else:
-                    cellCardLead = '&#10148;' # or alternative right ararow &#8594;
+                    cellCardLead = '&#10148;&#10148;' # or alternative right arrow &#8594;
             cellCard =  cellCardLead + cellCard
             trickStartColumn = 1 if self.args.playTricksLeftRight else 1 + 'NESW'.index(rowLeader)
             # starting column depends on format type
@@ -227,13 +241,16 @@ class BboDDParTravLine(BboTravLineBase):
             myHeaders = ['Lead','','','','','']
         else:
             myHeaders = ['']
+            declIndex = 'NESW'.index(self.decl)
+            dummyIndex = (declIndex + 2) % 4
+            dummyLetter = 'NESW'[dummyIndex]
             for i in range(trickColCount):
                 myLetter = 'NESW'[i%4]
                 myColor = self.colorForDir(myLetter)
-                # use declColor for both decl and dummy
-                if myColor == None:
+                # here use declColor for both decl and dummy (since decl plays all cards)
+                if myLetter == dummyLetter:
                     myColor = self.declColor()
-                myHeaders.append( f'<span style="background-color:{myColor}">&nbsp;{myLetter}&nbsp;</span>&nbsp;')
+                myHeaders.append( f'&nbsp;<span style="background-color:{myColor}">&nbsp;{myLetter}&nbsp;</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;')
             myHeaders.append('') # for last column
         # print(myHeaders, file=sys.stderr)
         # print(tab, file=sys.stderr)

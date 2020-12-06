@@ -41,24 +41,22 @@ class BboDDPlayReporter(BboBase):
         for bdnum in range (1, self.args.boards + 1):
             BboDDParTravLine.printHandPlusDDTable(bdnum)
             for tline in travellers[bdnum]:
-                if self.args.debug:
-                    print(bdnum, tline.playerDir, tline.playCount, tline.playString, tline.claimed)
-                if tline.contract == None:
-                    # special case for pass-out or AVG
-                    print(f"Board {bdnum}, NS:{tline.north}-{tline.south} vs EW:{tline.east}-{tline.west}, {tline.resultStr}")
-                else:
-                    # normal contract with tricks, etc.
-                    nsScore = tline.nsScore
-                    ewScore = 100 - nsScore
-                    print(f"Board {bdnum}, NS:{tline.coloredName('N')}-{tline.coloredName('S')} ({nsScore:.2f}%)  vs EW:{tline.coloredName('E')}-{tline.coloredName('W')} ({ewScore:.2f}%), {tline.resultStr}, NS:{tline.nsPoints}")
-                    tline.getPlayAnalysis()
-                    tline.formatPlayAnalysis()
-                    print(f'Tricks Actually Taken: {tline.tricks}')
-                    print()
+                self.printPlayDetailsTable(bdnum, tline, addReplayButton=True)
             print()
         self.printHTMLClosing()
 
+    def printPlayDetailsTable(self, bdnum, tline, addReplayButton=False):
+        if self.args.debug:
+            print(bdnum, tline.playerDir, tline.playCount, tline.playString, tline.claimed)
+        print(tline.summaryLine())
+        if tline.contract is not None:
+            tline.getPlayAnalysis()
+            tline.formatPlayAnalysis(addReplayButton)
+            print(f'Tricks Actually Taken: {tline.tricks}')
+            print()
+    
 
 #-------- main stuff starts here -----------
 
-BboDDPlayReporter().genReport()
+if __name__ == '__main__':
+    BboDDPlayReporter().genReport()
