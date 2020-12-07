@@ -179,7 +179,7 @@ class BboDDParTravLine(BboTravLineBase):
         
 
     def replayButtonHtml(self):
-        return f'&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://dds.bridgewebs.com/bsol2/ddummy.htm?club=us_tomdeneau&lin={self.linStr}" target="_blank" class="button">Replay It</a>'
+        return f'&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://dds.bridgewebs.com/bsol2/ddummy.htm?club=us_tomdeneau&lin={self.linStr}" target="_blank" class="button"><b>Replay It</b></a>'
 
     def formatPlayAnalysis(self, addReplayButton):
         # functions.PrintPBNPlay(ctypes.pointer(DDplayPBN), ctypes.pointer(solved))
@@ -208,11 +208,13 @@ class BboDDParTravLine(BboTravLineBase):
             r = (i-1)//4
             if (i-1)%4 == 0:
                 rowLeader = self.dealInfos[self.bdnum].pbnDeal.playerHoldingCard(cellSuit, cellRank)
+                trickCards = []
                 # add leader in first column if condensed format
                 if self.args.playTricksLeftRight:
                     tab[r][0] = f'{rowLeader}<sub>&nbsp;&nbsp</sub>'
                 else:
                     cellCardLead = '&#10148;&#10148;' # or alternative right arrow &#8594;
+            trickCards.append(cellCard)
             cellCard =  cellCardLead + cellCard
             trickStartColumn = 1 if self.args.playTricksLeftRight else 1 + 'NESW'.index(rowLeader)
             # starting column depends on format type
@@ -220,10 +222,7 @@ class BboDDParTravLine(BboTravLineBase):
             c = c-4 if c > 4 else c
             if not self.args.playTricksLeftRight:
                 c = (c-1)%4 + 1
-                # also show winner of previous trick
-                if (i-1)%4 == 0 and r != 0:
-                    tab[r-1][c] = re.sub('<sub', '*<sub', tab[r-1][c])
-                    
+            
             trix = self.solvedPlayContents.tricks[i]
             if trix == lasttrix:
                 tab[r][c] = f'{cellCard}<sub>&nbsp;&nbsp</sub>'
@@ -237,6 +236,20 @@ class BboDDParTravLine(BboTravLineBase):
                     bgcolor = self.defenderColor(player)
                 tab[r][c] = f'<span style="background-color:{bgcolor}">{cellCard}<sub> {trix:2}</sub>'
                 lasttrix = trix
+            if not self.args.playTricksLeftRight:
+                # also compute winner of trick if we have completed a row
+                nextCol = (c + 1) % 4
+                if nextCol == 0:
+                    nextCol = 4
+                if nextCol == trickStartColumn:
+                    trickWinner = self.trickWinner(trickCards)
+                    trickWinnerIndex = trickCards.index(trickWinner)
+                    winnerCol = (trickStartColumn + trickWinnerIndex) % 4
+                    if winnerCol == 0:
+                        winnerCol = 4
+                    # print('winnerCol:', winnerCol, trickWinner, file=sys.stderr)
+                    tab[r][winnerCol] = re.sub('<sub', '*<sub', tab[r][winnerCol])
+
         if self.args.playTricksLeftRight:
             myHeaders = ['Lead','','','','','']
         else:
@@ -286,6 +299,30 @@ class BboDDParTravLine(BboTravLineBase):
 
         return fut2
 
+    # given four cards played to a trick, return the one that wins the trick
+    def trickWinner(self, cards):
+        # print(cards, self.trumpstr, file=sys.stderr)
+        ledSuit = None
+        highestTrump = 0
+        highestLedSuit = 0
+        for (i, card) in enumerate(cards):
+            (suit, rankchr) = card
+            rank = self.Deal.Hand.cardRank(rankchr)
+            if ledSuit is None:
+                ledSuit = suit
+            if suit == self.trumpstr:
+                highestTrump = max(highestTrump, rank)
+                # print('trump:', rank, highestTrump, file=sys.stderr)
+            elif suit == ledSuit:
+                highestLedSuit = max(highestLedSuit, rank)
+                # print('ledsuit:', rank, highestLedSuit, file=sys.stderr)
+        if highestTrump > 0:
+            winner = f'{self.trumpstr}{"23456789TJQKA"[highestTrump]}'
+        else:
+            winner = f'{ledSuit}{"23456789TJQKA"[highestLedSuit]}'
+        # print(winner, file=sys.stderr)
+        return winner
+    
     # print hand and DD table using outer html table
     @classmethod
     def printHandPlusDDTable(cls, bdnum):
@@ -319,19 +356,19 @@ class BboDDParTravLine(BboTravLineBase):
             self.pbnDeal = pbnDeal
             
             # other fields left for later computation
-            self.ddTable = None
+            self.cddTable = None
             self.parResults = None
 
         def getDDTable(self):
-            if self.ddTable is None:
+            if self.cddTable is None:
                 # print(f'...computing DD Table for bdnum {bdnum}')
                 self.computeDDTable()
-            return self.ddTable
+            return self.cddTable
         
         def computeDDTable(self):
             if self.Testing:
                 return
-            self.ddTable = dds.ddTablesRes()
+            self.cddTable = dds.ddTablesRes()
             self.pres = dds.allParResults()
 
             mode = 0
@@ -341,7 +378,14 @@ class BboDDParTravLine(BboTravLineBase):
 
             dds.SetMaxThreads(0)
 
-            res = dds.CalcAllTablesPBN(ctypes.pointer(self.DDdealsPBN), mode, trumpFilter, ctypes.pointer(self.ddTable), ctypes.pointer(self.pres))
+            res = dds.CalcAllTablesPBN(ctypes.pointer(self.DDdealsPBN), mode, trumpFilter, ctypes.pointer(self.cddTable), ctypes.pointer(self.pres))
+            table = ctypes.pointer(self.cddTable.results[0])
+            suits = 5
+            dirs = 4
+            self.pyddTable = [[0 for i in range(dirs)] for j in range(suits)]
+            for suitidx in range(suits):
+                for diridx in range(dirs):
+                    self.pyddTable[suitidx][diridx] = table.contents.resTable[suitidx][diridx]
 
 
         def getHandString(self):
@@ -354,10 +398,7 @@ class BboDDParTravLine(BboTravLineBase):
         def getDDTricks(self, suit, dir):
             suitidx = 'SHDCNT'.index(suit)
             diridx = 'NESW'.index(dir)
-            if self.Testing:
-                return ((suitidx + diridx) % 4) + 5
-            table = ctypes.pointer(self.ddTable.results[0])
-            return table.contents.resTable[suitidx][diridx]
+            return self.pyddTable[suitidx][diridx]
             
         def getDDTableStr(self, title):
             if not self.Testing:
@@ -385,7 +426,7 @@ class BboDDParTravLine(BboTravLineBase):
         def printDDTableClassic(self):
             self.getDDTable()
             print('Table Classic\n-------')
-            functions.PrintTable(ctypes.pointer(self.ddTable.results[0]))
+            functions.PrintTable(ctypes.pointer(self.cddTable.results[0]))
 
         def getDealerIndex(self):
             return (self.bdnum-1) % 4
@@ -455,7 +496,7 @@ class BboDDParTravLine(BboTravLineBase):
         def computePar(self):
             self.getDDTable()
             self.parResults = dds.parResultsDealer()
-            res = dds.DealerPar(ctypes.pointer(self.ddTable.results[0]), ctypes.pointer(self.parResults), self.getDealerIndex(), self.getVulIndex())
+            res = dds.DealerPar(ctypes.pointer(self.cddTable.results[0]), ctypes.pointer(self.parResults), self.getDealerIndex(), self.getVulIndex())
             return self.parResults
         
         def printPar(self):

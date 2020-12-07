@@ -46,19 +46,29 @@ class BboDDParReporter(BboBase):
 
         # hand, ddtable and par display
         self.printHTMLOpening()
+        self.printButtonScript()
         bidReporter = BboDDBidReporter()
         playReporter = BboDDPlayReporter()
         bidReporter.args = playReporter.args = self.args
         for bdnum in boardList:
+            print(f'Board {bdnum}', file=sys.stderr)
             BboDDParTravLine.printHandPlusDDTable(bdnum)
             self.showOptimumLeadsAllContracts(bdnum)
             print()
             self.printResultsTable(bdnum)
             for tline in sorted(self.travellers[bdnum], reverse=True, key=self.tlineScore):
+                self.printDivOpening(tline)
                 bidReporter.printBidDetailsTable(tline)
                 playReporter.printPlayDetailsTable(bdnum, tline)
-                pass
+                self.printDivClosing()
         self.printHTMLClosing()
+
+    def printDivOpening(self, tline):
+        divId = self.getDivId(tline)
+        print(f'<div id="{divId}" style="display:none">')
+        
+    def printDivClosing(self):
+        print('</div>')
 
     @staticmethod
     def tlineScore(tline):
@@ -77,7 +87,7 @@ class BboDDParReporter(BboBase):
         for tline in sorted(self.travellers[bdnum], reverse=True, key=self.tlineScore):
             tab[r][0:2] = [f'{tline.north}-{tline.south}&nbsp;', f'{tline.east}-{tline.west}&nbsp;']
             tab[r][2:4] = [f'{tline.resultStr}&nbsp;', f'{tline.nsPoints}&nbsp;', f'{tline.nsScore:5.2f}%&nbsp;', f'{(100-tline.nsScore):5.2f}%&nbsp;']
-            tab[r][-1] = tline.replayButtonHtml()
+            tab[r][-1] = f'{tline.replayButtonHtml()}&nbsp;&nbsp;{self.detailsButtonHtml(tline)}'
             r += 1
         print(BboBase.genHtmlTable(tab, self.args, colalignlist=calist))
         print('</b>')
@@ -145,6 +155,29 @@ class BboDDParReporter(BboBase):
             if holding & (1 << i) != 0:
                 str += self.getRankChr(i)
         return str
+
+    @staticmethod
+    def getDivId(tline):
+        return f'B{tline.bdnum}-{tline.north}'
+    
+    def detailsButtonHtml(self, tline):
+        divId = self.getDivId(tline)
+        return f'<button class="button" onclick="toggler(\'{divId}\')"><b>Details</b></button>'
+        
+    def printButtonScript(self):
+        print('''
+ <script>
+ function toggler(id) {
+     var divs = document.getElementsByTagName("div");
+     for (elem of divs) {
+         elem.style.display = "none";
+     }
+     var x = document.getElementById(id);
+     x.style.display = "block";
+ }
+ </script>
+''')
+        
 
 #-------- main stuff starts here -----------
 
