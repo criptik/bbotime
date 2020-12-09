@@ -262,6 +262,12 @@ class BboTravLineBase(object):
             # and if doesn't exist in dict, just return name
             return self.origPartners.get(pard, name)  
 
+    def directionForName(self, name):
+        return 'NESW'[self.playerDir.index(name)]
+    
+    def pctScoreForName(self, name):
+        return self.nsScore if self.directionForName(name) in 'NS' else (100 - self.nsScore)
+    
     # convert time string in traveller to an integer num of secs
     def readTime(self, str):
         return time.mktime(time.strptime(str, '%Y-%m-%d %H:%M'))
@@ -459,7 +465,10 @@ class TravParserCsv(TravParserBase):
             found = False
             travlines = []
             while True:
-                line = next(read_obj).rstrip()
+                line = next(read_obj, None)
+                if line is None:
+                    break
+                line = line.rstrip()
                 # print(line)
                 if found:
                     travlines.append(line.lstrip('#'))

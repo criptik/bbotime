@@ -326,6 +326,7 @@ class BboDDParTravLine(BboTravLineBase):
     # print hand and DD table using outer html table
     @classmethod
     def printHandPlusDDTable(cls, bdnum):
+        print(f'<a id="Board{bdnum}" />')
         handStr = f'<pre>{cls.dealInfos[bdnum].getHandString()}</pre>'
         ddTableStr = f'<pre>{cls.dealInfos[bdnum].getDDTableStr("Double Dummy Table")}\n\n</pre>'
         # 3 cols, 1 row in outer table

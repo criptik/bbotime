@@ -35,8 +35,8 @@ class BboDDParReporter(BboBase):
         BboDDParTravLine.importArgs(self.args)
         self.travellers = {}
 
-        boardList = range (1, self.args.boards + 1) if self.args.onlyBoard is None else [self.args.onlyBoard]
-        for bdnum in boardList:
+        self.boardList = range (1, self.args.boards + 1) if self.args.onlyBoard is None else [self.args.onlyBoard]
+        for bdnum in self.boardList:
             self.travellers[bdnum] = []
             for row in self.travTableData[bdnum]:
                 tline = BboDDParTravLine(bdnum, row, self.travParser)
@@ -50,12 +50,13 @@ class BboDDParReporter(BboBase):
         bidReporter = BboDDBidReporter()
         playReporter = BboDDPlayReporter()
         bidReporter.args = playReporter.args = self.args
-        for bdnum in boardList:
+        self.printPairResultsTables()
+        for bdnum in self.boardList:
             print(f'Board {bdnum}', file=sys.stderr)
             BboDDParTravLine.printHandPlusDDTable(bdnum)
             self.showOptimumLeadsAllContracts(bdnum)
             print()
-            self.printResultsTable(bdnum)
+            self.printBoardTraveller(bdnum)
             for tline in sorted(self.travellers[bdnum], reverse=True, key=self.tlineScore):
                 self.printDivOpening(tline)
                 bidReporter.printBidDetailsTable(tline)
@@ -70,11 +71,62 @@ class BboDDParReporter(BboBase):
     def printDivClosing(self):
         print('</div>')
 
+    def printPairResultsTables(self):
+        pairBoards = {}
+        # make list of tlines for each pair
+        for bdnum in self.boardList:
+            for tline in self.travellers[bdnum]:
+                nskey = f'{tline.north}-{tline.south}'
+                ewkey = f'{tline.east}-{tline.west}'
+                for key in [nskey, ewkey]:
+                    if self.args.names is None:
+                        found = True
+                    else:
+                        found = False
+                        for name in self.args.names:
+                            if name in key:
+                                found = True
+                                break
+                    if found:
+                        blist = pairBoards.get(key, [])
+                        blist.append(tline)
+                        pairBoards[key] = blist
+        headers = ['Bd', 'Bid', 'Score', 'Pct', 'Direction']
+        rows = len(self.boardList)
+        cols = len(headers) 
+        tab = [['' for i in range(cols)] for j in range(rows)]
+        for pair in sorted(pairBoards.keys()):
+            print(pair, '\n--------', file=sys.stderr)
+            print(f'<b>Boards for {pair}</b>')
+            pairnames = pair.split('-')
+            bgColors = ['white']
+            for (r, tline) in enumerate(sorted(pairBoards[pair], reverse=True, key=lambda tline: tline.pctScoreForName(pairnames[0]))):
+                direction = 'NS' if tline.directionForName(pairnames[0]) in 'NS' else 'EW'
+                oppNames = f'{tline.east}-{tline.west}' if direction == 'NS' else f'{tline.north}-{tline.south}'
+                bgColors.append('white' if tline.decl is None else
+                                'cyan' if tline.decl in direction else
+                                'lightpink')
+                    
+                tab[r] = [f'<a href="#Board{tline.bdnum}">{tline.bdnum:2}</a>',
+                          tline.resultStr,
+                          f'{tline.nsPoints if direction == "NS" else -1 * tline.nsPoints}',
+                          f'&nbsp;&nbsp;{tline.pctScoreForName(pairnames[0]):6.2f}%',
+                          f'&nbsp;&nbsp;{direction} vs. {oppNames}'
+                          ]
+                # print(tline.bdnum, direction, tline.pctScoreForName(pairnames[0]), tline.nsScore, file=sys.stderr)
+            # print('\n', file=sys.stderr)
+            tabHtml = BboBase.genHtmlTable(tab, self.args, headers=headers)
+            # now patch up the <tr> to show bgColor
+            # print(bgColors, file=sys.stderr)
+            for n in range(rows + 1):
+                tabHtml = re.sub('<tr>', f'<tr style="background-color:{bgColors[n]}">', tabHtml, count=1)
+            print(tabHtml)
+            
     @staticmethod
     def tlineScore(tline):
         return tline.nsScore
     
-    def printResultsTable(self, bdnum):
+    def printBoardTraveller(self, bdnum):
         print('<b>')
         numResults = len(self.travellers[bdnum])
         rows = numResults
