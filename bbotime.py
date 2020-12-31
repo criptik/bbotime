@@ -38,18 +38,26 @@ class BboTimeReporter(BboBase):
         parser.add_argument('--rowsPerPlayer', default=1, type=int, help='rows per player in table')
         parser.add_argument('--minsPerBoard', default=6, type=int, help='minutes allowed per board (for simclocked)')
 
-    def childGenReport(self):
+    def childArgsFix(self):
         # build default start time from directory name (if start time not supplied in args)
         if self.args.tstart is None:
             head, sep, tail = self.args.dir.partition('/')
             if head == 'travs':
                 self.args.tstart = tail + ' 15:00'
 
+        
+    def childGenReport(self):
+        # check whether these datafiles support the time field which we need
+        if not self.supportsTimeField():
+            print(f'ERROR: The data files in {self.args.dir} do not support the Time Field, which we need', file=sys.stderr)
+            sys.exit(1)
+            
         self.initMap()
 
         # at this point the robot names are fixed up if they could be
         # so proceed as if there was no duplication of names
         BboTimeTravLine.importArgs(self.args)
+
         for bdnum in range (1, self.args.boards + 1):
             # place rows in big table indexed by boardnumber and North and East names
             for row in self.travTableData[bdnum]:

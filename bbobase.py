@@ -63,6 +63,9 @@ class BboBase(object):
 
         return travTableData
 
+    def supportsTimeField(self):
+        return self.travParser.supportsTimeField()
+    
     def determineTravParser(self):
         # for now, look in args.dir for file types
         for f in os.listdir(self.args.dir):
@@ -74,9 +77,6 @@ class BboBase(object):
         print('--dir directory must contain either .html or .csv files', file=sys.stderr)
         sys.exit(1)
         
-    def createObject(self, bdnum, row, travParser):
-        return BboTravLineBase(self.args, bdnum, row, travParser)
-
     def appDescription(self):
         return 'BBO Base'
     
@@ -112,10 +112,17 @@ class BboBase(object):
             bprMap = {20:4, 21:3, 8:2, 9:3}
             self.args.bpr = bprMap.get(self.args.boards)
 
+        # child can do its own arg fixing
+        self.childArgsFix()
+
+        
     # allow child to add its own args
     def addParserArgs(self, parser):
         pass
 
+    def childArgsFix(self):
+        pass
+    
     def printHTMLOpening(self):
         borderStyle = '' if not self.args.tableBorders else '''
      table, th, td {
@@ -269,7 +276,8 @@ class BboTravLineBase(object):
         return self.nsScore if self.directionForName(name) in 'NS' else (100 - self.nsScore)
     
     # convert time string in traveller to an integer num of secs
-    def readTime(self, str):
+    @staticmethod
+    def readTime(str):
         return time.mktime(time.strptime(str, '%Y-%m-%d %H:%M'))
 
     def hasPlayer(self, name):
@@ -332,7 +340,12 @@ class TravParserBase(ABC):
     def getNSPoints(self, row):
         pass
 
+    @abstractmethod
     def getNumBoards(self):
+        pass
+
+    @abstractmethod
+    def supportsTimeField(self):
         pass
 
     def removePercentSyms(self, s):
@@ -341,7 +354,7 @@ class TravParserBase(ABC):
         s = re.sub('%2C', ',', s)
         s = re.sub('%20', ' ', s)
         return s
-        
+
 # class to read the html files as pulled over by BBO-2-Brian Helper
 class TravParserHtml(TravParserBase):
     def initParser(self):
@@ -373,6 +386,10 @@ class TravParserHtml(TravParserBase):
     def getNumBoards(self):
         # html directories have one file per board
         return len([name for name in os.listdir(self.args.dir) if os.path.isfile(os.path.join(self.args.dir, name)) and name.endswith('.html')])
+
+    # html files always contain time field
+    def supportsTimeField(self):
+        return True
     
     # this routine reads the html file for one traveller and uses BeautifulSoup
     # to return an array of rows, each a dict for a single row of the html file
@@ -423,10 +440,20 @@ class TravParserHtml(TravParserBase):
         # print(json.dumps(table_data, indent=4))
         return table_data
 
+    
 # class to read the csv file as created by BBO Extractor
 class TravParserCsv(TravParserBase):
+    # name of the field in the csv files for time
+    csvTimeFieldName = 'tdate'
     def initParser(self):
-        pass
+        self.csvKeys = None
+        # calculate  GMT offset from localtime in case needed
+        while True:
+            self.gmOffsetSecs = time.mktime(time.gmtime()) - time.mktime(time.localtime())
+            if self.gmOffsetSecs % (60 * 60) == 0:
+                break
+
+
 
     def getLinStr(self, row):
         s = row['playdata']
@@ -458,7 +485,25 @@ class TravParserCsv(TravParserBase):
             if fn.endswith('.csv'):
                 return f'{self.args.dir}/{fn}'
         return None
-    
+
+    # csv files might or might not contain time field
+    def supportsTimeField(self):
+        return self.csvTimeFieldName in self.csvKeys
+
+    # time value is a little strange
+    # some of the html tables read use GMT rather than local time
+    def calcTimeVal(self, row):
+        if not self.supportsTimeField():
+            return None        
+        timestr = row[self.csvTimeFieldName]
+        timeval = BboTravLineBase.readTime(timestr)
+        # this is a kludge and assumes no tournament lasts longer than gmOffsetSecs
+        startTimeSecs = BboTravLineBase.readTime(self.args.tstart)
+        if timeval - startTimeSecs > self.gmOffsetSecs:
+            timeval -= self.gmOffsetSecs
+        return(time.strftime('%Y-%m-%d %H:%M', time.localtime(timeval)))
+        
+
     def doParsing(self, travTableData):
         fname = self.getCsvFileName()    
         with open(fname, 'r') as read_obj:
@@ -483,11 +528,15 @@ class TravParserCsv(TravParserBase):
         for row in csv_reader:
             # row variable is a dict that represents a row in csv
             # pprint(row)
+            # store so we can tell whether we support time
+            if self.csvKeys is None:
+                self.csvKeys = row.keys()
             bdnum = int(row['Board'])
             if bdnum > self.args.boards:
                 break
             else:
-                row['Time'] = None  #kludge
+                # 
+                row['Time'] = self.calcTimeVal(row)
                 travTableData[bdnum].append(row)
             
         
