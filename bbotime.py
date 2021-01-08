@@ -20,6 +20,7 @@ import time
 import os
 from pprint import pprint
 import tabulate
+import re
 
 from bbobase import BboBase, BboTravLineBase
 
@@ -85,6 +86,7 @@ class BboTimeReporter(BboBase):
         if self.args.debug:
             self.printMap()
 
+        self.printHTMLOpening()
         self.printSummary(f'\nUnclocked Report for {self.args.tstart}')
         
         if self.args.simclocked:
@@ -129,6 +131,8 @@ class BboTimeReporter(BboBase):
                 self.printMap()
             self.printSummary(f'\n\nClocked Simulation for {self.args.tstart}')
 
+        self.printHTMLClosing()
+
     def initMap(self):
         for n in range(1, self.args.boards+1):
             map[n] = {}
@@ -154,9 +158,8 @@ class BboTimeReporter(BboBase):
         print(title)
         rounds = int(self.args.boards/self.args.bpr)
         numpairs = len(players)
-        numtables = int(numpairs/2)
-        numcols = rounds + 2  # add in name and totals
-        self.hdrRows = numrows = 1 + numtables + 1
+        numcols = rounds + 3  # add in name and totals and max
+        self.hdrRows = 1
         numrows = self.hdrRows + numpairs * self.args.rowsPerPlayer
         self.tab = [['' for i in range(numcols)] for j in range(numrows)]
         self.addHeaderInfo()
@@ -165,41 +168,65 @@ class BboTimeReporter(BboBase):
         calist = []
         for n in range(numcols):
             calist.append('center')
-        calist[0] = calist[-1] = 'right'
-        print(tabulate.tabulate(self.tab, tablefmt=self.args.tablefmt, colalign=calist))
+        calist[0] = calist[-2] = calist[-1] = 'right'
+        tableHtml = BboBase.genHtmlTable(self.tab, self.args, colalignlist=calist)
+        # now must go thru and move the background-color things into the td elements
+        tableHtml = re.sub('<td style="(.+?)"> *(background-color:\w+) (.+?)</td>',
+                           r'<td style="\1 \2;">\3</td>',
+                           tableHtml)
+        # the "header" row had weird spacing, fix that
+        tableHtml = re.sub('> {6,}(\d+)</td>',
+                           r'>     \1     </td>',
+                           tableHtml)
+        
+        print(tableHtml)
         
     # header for summaries
     def addHeaderInfo(self):
         self.tab[0][0] = 'Round->'
-        self.tab[0][-1] = '-Totals-'
-        # for each round put in round number followed by who played who
+        self.tab[0][-2] = '---Totals---'
+        self.tab[0][-1] = '-Max Wait-'
+        self.colorDicts = []
+        # for each round put in round number and figure out colors
         for rnd in range(1, int(self.args.boards/self.args.bpr) + 1):
-            self.tab[0][rnd] = f'    {rnd:2}     '
+            self.tab[0][rnd] = f'{rnd:2}'
             bdnum = (rnd-1) * self.args.bpr + 1
             rowidx = 1
+            thisColorDict = {}
+            colors = ['cyan', 'pink', 'lightgreen', 'yellow', 'lightorange', 'chartreuse']
+            colorIndex = 0
             for player in map[bdnum].keys():
                 tline = map[bdnum][player]
-                if tline.origNorth == player:
-                    charsPerName = 3
-                    self.tab[rowidx][rnd] = f'{tline.origNorth[0:charsPerName]}-{tline.origEast[0:charsPerName]}'
-                    rowidx += 1
-                    
+                if player not in thisColorDict.keys():
+                    thisColorDict[tline.origNorth] = thisColorDict[tline.origEast] = colors[colorIndex]
+                    colorIndex += 1
+            if False:
+                print(thisColorDict)
+                sys.exit(1)
+            self.colorDicts.append(thisColorDict)
+        # print(self.colorDicts)
+        
     def addPersonInfo(self, player, pidx):
         row = self.hdrRows + pidx * self.args.rowsPerPlayer
         self.tab[row][0] = player
         totalPlay = 0
         totalWait = 0
+        maxWait = 0
         for rnd in range(1, int(self.args.boards/self.args.bpr) + 1):
             roundMins = self.roundElapsedMins(rnd, player)
             tlineLastInRound = map[rnd * self.args.bpr][player]
             waitMins = tlineLastInRound.waitMins()
             specialChar = ' ' if not tlineLastInRound.clockedTruncation else '*'
             col = rnd
-            self.tab[row][col] = f'{int(roundMins):2}{specialChar}+{int(waitMins):2}'
+            myColor = self.colorDicts[rnd-1][player]
+            # add a background-color in the cell data which will later be moved into the <td> element
+            # this works better than using span
+            self.tab[row][col] = f'background-color:{myColor} {int(roundMins):2}{specialChar}+{int(waitMins):2}'
             totalPlay += roundMins
             totalWait += waitMins
-        self.tab[row][-1] = f'  {int(totalPlay):3} + {int(totalWait):2}'
-
+            maxWait = max(maxWait, waitMins)
+        self.tab[row][-2] = f'  {int(totalPlay):3} + {int(totalWait):2}'
+        self.tab[row][-1] = f'{int(maxWait):2}'
     # return elapsedTime and waitTime for that round
     def roundElapsedMins(self, rnd, player):
         bdnumLastInRound = rnd * self.args.bpr
