@@ -129,7 +129,7 @@ class BboTimeReporter(BboBase):
 
             if self.args.debug:
                 self.printMap()
-            self.printSummary(f'\n\nClocked Simulation for {self.args.tstart}')
+            self.printSummary(f'\n\nClocked Simulation for {self.args.tstart} with {self.args.minsPerBoard} minutes per board')
 
         self.printHTMLClosing()
 
@@ -193,7 +193,7 @@ class BboTimeReporter(BboBase):
             bdnum = (rnd-1) * self.args.bpr + 1
             rowidx = 1
             thisColorDict = {}
-            colors = ['cyan', 'pink', 'lightgreen', 'yellow', 'lightorange', 'chartreuse']
+            colors = ['cyan', 'pink', 'lightgreen', 'yellow', 'plum', 'orange']
             colorIndex = 0
             for player in map[bdnum].keys():
                 tline = map[bdnum][player]
