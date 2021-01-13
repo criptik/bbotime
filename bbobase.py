@@ -143,6 +143,8 @@ class BboBase(object):
 	 text-decoration: none;
          }}
         {borderStyle}
+
+        {self.childStyleInfo()}
         </style>
         ''')
    

@@ -48,6 +48,9 @@ class BboTimeReporter(BboBase):
             if head == 'travs':
                 self.args.tstart = tail + ' 15:00'
 
+
+    def childStyleInfo(self):
+        return (GridGen.styleInfo() if self.args.useGrid else '')
         
     def childGenReport(self):
         # check whether these datafiles support the time field which we need
@@ -386,7 +389,119 @@ class BboTimeTravLine(BboTravLineBase):
         return mystr
 
     
-        
+
+class GridGen(object):
+    def __init__(self, rowTime):
+        self.rowTime = rowTime
+        self.rowNum = 1
+
+    @classmethod
+    def styleInfo(cls):
+        return '''
+	.grid-container {
+	     display: grid;
+	     grid-gap: 1px;
+	     padding: 2px;
+	     background-color: grey;
+	 }
+
+	 .grid-container > div {
+	     text-align: center;
+	     padding-top: 5px;
+	     padding-bottom: 5px;
+	     font-size: 15px;
+             max-height: 25px;
+	 }
+
+         .divtext {
+             background-color: white;
+             white-space: nowrap;
+             padding-left: 5px;
+             padding-right: 5px
+          }
+        '''
+
+    def gridOpen(self):
+        # +3 here because of name, tot, max columns
+        colTemplate = f'repeat({3 + self.rowTime}, 1fr)'
+        return self.divOpen('grid-container', {'grid-template-columns': colTemplate, 'width' : '1500px'})
+
+    def gridRow(self, pairName, roundData, tots, max):
+        # basically checks the roundData meets rowTime
+        totalTime = 0
+        colorSpans = []
+        for (color, playTime, waitTime) in roundData:
+            colorSpans.append((color, playTime))
+            colorSpans.append(('white', waitTime))
+            totalTime += (playTime + waitTime)
+        if totalTime != self.rowTime:
+            print(f'row {self.rowNum}, roundData does not add up to {self.rowTime}: {roundData}', file=sys.stderr)
+            if totalTime <= self.rowTime:
+                waitDelta = self.rowTime - totalTime
+                print(f'adding waitTime of {waitDelta} at the end', file=sys.stderr)
+                (color, oldWaitTime) = colorSpans.pop()
+                colorSpans.append((color, oldWaitTime + waitDelta))
+            else:
+                # greater than, no fixup possible
+                print(f'Fatal', file=sys.stderr)
+                sys.exit(1)
+        self.rowNum += 1
+        return self.fullRowHtml(pairName, colorSpans, tots, max)
+
+    @staticmethod
+    def attrStr(attr, val):
+        return f'{attr}="{val}"'
+
+    @staticmethod
+    def divOpen(cls=None, styles=None, finalcr=True):
+        classStr =  styleStr = ''
+        if cls is not None:
+            classStr = GridGen.attrStr('class', cls)
+        if styles is not None:
+            stylist = ''
+            for sty in styles.keys():
+                stylist += f'{sty}:{styles[sty]}; '
+            styleStr = GridGen.attrStr('style', stylist)
+        divStr = f'<div {classStr} {styleStr}>'
+        if finalcr:
+            divStr += '\n'
+        return divStr
+
+    @staticmethod
+    def divClose():
+        return '</div>'
+
+    @staticmethod
+    def divFull(cls=None, styles=None, content=''):
+        return f'{GridGen.divOpen(cls, styles, False)}{content}{GridGen.divClose()}\n'
+
+
+    @staticmethod
+    def textCellDiv(content):
+        styles={}
+        styles['grid-column-end'] = 'span 1'
+        return GridGen.divFull('divtext', styles, content)
+
+    @staticmethod
+    def fullRowHtml(pairName, colorSpans, tots, max):
+        nameCellStyles = {
+            'grid-area': ' / 1 / / span 1',
+        }
+        s = ''
+        s += GridGen.divFull('divtext', nameCellStyles, pairName)
+        for (color, spanAmt) in colorSpans:
+            if spanAmt == 0:
+                continue
+            styles = {}
+            styles['background-color'] = color
+            styles['grid-column-end'] = f'span {spanAmt}'
+            s += GridGen.divFull(None, styles, f'{spanAmt}')
+        for content in [tots, max]:
+            s += GridGen.textCellDiv(content)
+        return s + '\n'
+
+    
 #-------- main stuff starts here -----------
-BboTimeReporter().genReport()
+if __name__ == '__main__':
+    BboTimeReporter().genReport()
     
