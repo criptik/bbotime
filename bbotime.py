@@ -162,38 +162,23 @@ class BboTimeReporter(BboBase):
 class SummaryGenBase(ABC):
     def __init__(self, args):
         self.args = args
+        self.numpairs = len(players)
+        self.rounds = int(self.args.boards/self.args.bpr)
         
     def printSummary(self, title):
         print(title)
-        numpairs = len(players)
-        numcols = self.roundColumns() + 3  # add in name and totals and max
-        self.hdrRows = 1
-        numrows = self.hdrRows + numpairs * self.args.rowsPerPlayer
-        self.tab = [['' for i in range(numcols)] for j in range(numrows)]
+        self.setupSummary()
         self.addHeaderInfo()
+        self.buildColorDicts()
         for (pidx, p) in enumerate(sorted(players.keys())):
             self.addPersonInfo(p, pidx)
-        calist = []
-        for n in range(numcols):
-            calist.append('center')
-        calist[0] = calist[-2] = calist[-1] = 'right'
-        tableHtml = BboBase.genHtmlTable(self.tab, self.args, colalignlist=calist)
-        # do any fixups required
-        tableHtml = self.fixHtml(tableHtml)
+        print(self.renderSummary())
         
-        print(tableHtml)
-        
-    # header for summaries
-    def addHeaderInfo(self):
-        self.tab[0][0] = 'Round->'
-        self.tab[0][-2] = '---Totals---'
-        self.tab[0][-1] = '-Max Wait-'
+    def buildColorDicts(self):
+        # for each round figure out colors
         self.colorDicts = []
-        # for each round put in round number and figure out colors
-        for rnd in range(1, int(self.args.boards/self.args.bpr) + 1):
-            self.putRoundNumInHeader(rnd)
+        for rnd in range(1, self.rounds + 1):
             bdnum = (rnd-1) * self.args.bpr + 1
-            rowidx = 1
             thisColorDict = {}
             colors = ['cyan', 'pink', 'lightgreen', 'yellow', 'plum', 'orange']
             colorIndex = 0
@@ -202,15 +187,9 @@ class SummaryGenBase(ABC):
                 if player not in thisColorDict.keys():
                     thisColorDict[tline.origNorth] = thisColorDict[tline.origEast] = colors[colorIndex]
                     colorIndex += 1
-            if False:
-                print(thisColorDict)
-                sys.exit(1)
             self.colorDicts.append(thisColorDict)
-        # print(self.colorDicts)
         
     def addPersonInfo(self, player, pidx):
-        row = self.hdrRows + pidx * self.args.rowsPerPlayer
-        self.tab[row][0] = player
         totalPlay = 0
         totalWait = 0
         maxWait = 0
@@ -221,13 +200,13 @@ class SummaryGenBase(ABC):
             specialChar = ' ' if not tlineLastInRound.clockedTruncation else '*'
             myColor = self.colorDicts[rnd-1][player]
             playerInfoText = f'{int(roundMins):2}{specialChar}+{int(waitMins):2}'
-            self.putPlayerRoundInfo(row, rnd, roundMins, waitMins, tlineLastInRound, myColor)
+            self.putPlayerRoundInfo(pidx, rnd, roundMins, waitMins, tlineLastInRound, myColor)
             totalPlay += roundMins
             totalWait += waitMins
             maxWait = max(maxWait, waitMins)
-        self.tab[row][-2] = f'  {int(totalPlay):3} + {int(totalWait):2}'
-        self.tab[row][-1] = f'{int(maxWait):2}'
 
+            self.addPairNameAndTotals(pidx, player, totalPlay, totalWait, maxWait)
+        
     # return elapsedTime and waitTime for that round
     def roundElapsedMins(self, rnd, player):
         bdnumLastInRound = rnd * self.args.bpr
@@ -235,25 +214,58 @@ class SummaryGenBase(ABC):
         return (map[bdnumLastInRound][player].iEndTime - map[bdnumFirstInRound][player].iStartTime) / 60
 
     @abstractmethod
-    def roundColumns(self):
-        pass
-
-    @abstractmethod
     def putRoundNumInHeader(self, rnd):
         pass
     
     @abstractmethod
-    def putPlayerRoundInfo(self, row, rnd, roundMins, waitMins, tlineLastInRound, myColor):
+    def putPlayerRoundInfo(self, pidx, rnd, roundMins, waitMins, tlineLastInRound, myColor):
         pass
     
     def fixHtml(self, tableHtml):
         return tableHtml
     
-class TableSummaryGen(SummaryGenBase):
-    def roundColumns(self):
-        rounds = int(self.args.boards/self.args.bpr)
-        return rounds
+    @abstractmethod    
+    def setupSummary(self):
+        pass
 
+    @abstractmethod    
+    def renderSummary(self):
+        pass
+
+    @abstractmethod    
+    def addHeaderInfo(self):
+        pass
+
+    @abstractmethod    
+    def addPairNameAndTotals(self, pidx, player, totalPlay, totalWait, maxWait):
+        pass
+    
+class TableSummaryGen(SummaryGenBase):
+    def setupSummary(self):
+        self.numcols = self.rounds + 3  # add in name and totals and max
+        self.hdrRows = 1
+        numrows = self.hdrRows + self.numpairs * self.args.rowsPerPlayer
+        self.tab = [['' for i in range(self.numcols)] for j in range(numrows)]
+
+    # header for summaries
+    def addHeaderInfo(self):
+        self.tab[0][0] = 'Round->'
+        self.tab[0][-2] = '---Totals---'
+        self.tab[0][-1] = '-Max Wait-'
+        # for each round put in round number
+        for rnd in range(1, self.rounds + 1):
+            self.putRoundNumInHeader(rnd)
+        
+    def renderSummary(self):
+        calist = []
+        for n in range(self.numcols):
+            calist.append('center')
+        calist[0] = calist[-2] = calist[-1] = 'right'
+        tableHtml = BboBase.genHtmlTable(self.tab, self.args, colalignlist=calist)
+        # do any fixups required
+        tableHtml = self.fixHtml(tableHtml)
+        return tableHtml
+        
     def fixHtml(self, tableHtml):
         # must go thru and move the background-color things into the td elements
         tableHtml = re.sub('<td style="(.+?)"> *(background-color:\w+) (.+?)</td>',
@@ -270,24 +282,42 @@ class TableSummaryGen(SummaryGenBase):
         self.tab[0][rnd] = f'{rnd:2}'
         
 
-    def putPlayerRoundInfo(self, row, rnd, roundMins, waitMins, tlineLastInRound, myColor):
+    def putPlayerRoundInfo(self, pidx, rnd, roundMins, waitMins, tlineLastInRound, myColor):
+        row = self.hdrRows + pidx * self.args.rowsPerPlayer
         col = rnd
         specialChar = ' ' if not tlineLastInRound.clockedTruncation else '*'
         # add a background-color in the cell data which will later be moved into the <td> element
         # this works better than using span
         self.tab[row][col] = f'background-color:{myColor} {int(roundMins):2}{specialChar}+{int(waitMins):2}'
 
+    def addPairNameAndTotals(self, pidx, player, totalPlay, totalWait, maxWait):
+        row = self.hdrRows + pidx * self.args.rowsPerPlayer
+        self.tab[row][0] = player
+        self.tab[row][-2] = f'  {int(totalPlay):3} + {int(totalWait):2}'
+        self.tab[row][-1] = f'{int(maxWait):2}'
+
+        
 class GridSummaryGen(SummaryGenBase):
-    def roundColumns(self):
-        return 1
 
     def putRoundNumInHeader(self, rnd):
         pass
 
-    def putPlayerRoundInfo(self, row, rnd, roundMins, waitMins, tlineLastInRound, myColor):
+    def putPlayerRoundInfo(self, pidx, rnd, roundMins, waitMins, tlineLastInRound, myColor):
         pass
         
-        
+    def setupSummary(self):
+        pass
+
+    def renderSummary(self):
+        pass
+
+    # header for summaries
+    def addHeaderInfo(self):
+        pass
+
+    def addPairNameAndTotals(self, pidx, player, totalPlay, totalWait, maxWait):
+        pass
+    
 class BboTimeTravLine(BboTravLineBase):
     def __init__(self, bdnum, row, travParser):
         super(BboTimeTravLine, self).__init__(bdnum, row, travParser)
