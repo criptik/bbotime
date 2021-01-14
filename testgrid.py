@@ -68,7 +68,7 @@ body += gridGen.gridRow('Long Waiter', roundData, '300+25', '40')
 roundData = []
 for n in range(100):
     roundData.append(('yellow', 0, 1))
-body += gridGen.gridRow('WaitCells Only', roundData, '100+0', '40')
+body += gridGen.gridRow('WaitCells Only', roundData, '100+0', '40', False)
     
 body += GridGen.divClose() + '\n'
 
