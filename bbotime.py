@@ -39,7 +39,7 @@ class BboTimeReporter(BboBase):
         parser.add_argument('--simclocked', default=False, action='store_true', help='afterwards simulate as if clocked had been used')
         parser.add_argument('--rowsPerPlayer', default=1, type=int, help='rows per player in table')
         parser.add_argument('--minsPerBoard', default=6, type=int, help='minutes allowed per board (for simclocked)')
-        parser.add_argument('--useGrid', default=False, action='store_true', help='use grid to show timelines')
+        parser.add_argument('--showTimeline', default=False, action='store_true', help='use grid to show timelines')
 
     def childArgsFix(self):
         # build default start time from directory name (if start time not supplied in args)
@@ -50,7 +50,7 @@ class BboTimeReporter(BboBase):
 
 
     def childStyleInfo(self):
-        return (GridGen.styleInfo() if self.args.useGrid else '')
+        return (GridGen.styleInfo() if self.args.showTimeline else '')
         
     def childGenReport(self):
         # check whether these datafiles support the time field which we need
@@ -91,7 +91,7 @@ class BboTimeReporter(BboBase):
         if self.args.debug:
             self.printMap()
 
-        summaryGen = TableSummaryGen(self.args) if not self.args.useGrid else GridSummaryGen(self.args)
+        summaryGen = TableSummaryGen(self.args) if not self.args.showTimeline else GridSummaryGen(self.args)
         
         self.printHTMLOpening()
         summaryGen.printSummary(f'\nUnclocked Report for {self.args.tstart}')
@@ -196,32 +196,26 @@ class SummaryGenBase(ABC):
         totalPlay = 0
         totalWait = 0
         maxWait = 0
-        for rnd in range(1, int(self.args.boards/self.args.bpr) + 1):
+        for rnd in range(1, self.rounds + 1):
             roundMins = self.roundElapsedMins(rnd, player)
             tlineLastInRound = map[rnd * self.args.bpr][player]
             waitMins = tlineLastInRound.waitMins()
-            specialChar = ' ' if not tlineLastInRound.clockedTruncation else '*'
             myColor = self.colorDicts[rnd-1][player]
-            playerInfoText = f'{int(roundMins):2}{specialChar}+{int(waitMins):2}'
-            self.putPlayerRoundInfo(pidx, rnd, roundMins, waitMins, tlineLastInRound, myColor)
+            self.putPlayerRoundInfo(player, pidx, rnd, roundMins, waitMins, tlineLastInRound, myColor)
             totalPlay += roundMins
             totalWait += waitMins
             maxWait = max(maxWait, waitMins)
 
-            self.addPairNameAndTotals(pidx, player, totalPlay, totalWait, maxWait)
+        self.addPairNameAndTotals(pidx, player, totalPlay, totalWait, maxWait)
         
-    # return elapsedTime and waitTime for that round
+    # return elapsedTime and waitTime for that round for a given player
     def roundElapsedMins(self, rnd, player):
         bdnumLastInRound = rnd * self.args.bpr
         bdnumFirstInRound = bdnumLastInRound - self.args.bpr + 1
-        return (map[bdnumLastInRound][player].iEndTime - map[bdnumFirstInRound][player].iStartTime) / 60
+        return int((map[bdnumLastInRound][player].iEndTime - map[bdnumFirstInRound][player].iStartTime) / 60)
 
     @abstractmethod
-    def putRoundNumInHeader(self, rnd):
-        pass
-    
-    @abstractmethod
-    def putPlayerRoundInfo(self, pidx, rnd, roundMins, waitMins, tlineLastInRound, myColor):
+    def putPlayerRoundInfo(self, player, pidx, rnd, roundMins, waitMins, tlineLastInRound, myColor):
         pass
     
     def fixHtml(self, tableHtml):
@@ -257,7 +251,7 @@ class TableSummaryGen(SummaryGenBase):
         self.tab[0][-1] = '-Max Wait-'
         # for each round put in round number
         for rnd in range(1, self.rounds + 1):
-            self.putRoundNumInHeader(rnd)
+            self.tab[0][rnd] = f'{rnd:2}'
         
     def renderSummary(self):
         calist = []
@@ -281,11 +275,7 @@ class TableSummaryGen(SummaryGenBase):
         
         return tableHtml
 
-    def putRoundNumInHeader(self, rnd):
-        self.tab[0][rnd] = f'{rnd:2}'
-        
-
-    def putPlayerRoundInfo(self, pidx, rnd, roundMins, waitMins, tlineLastInRound, myColor):
+    def putPlayerRoundInfo(self, player, pidx, rnd, roundMins, waitMins, tlineLastInRound, myColor):
         row = self.hdrRows + pidx * self.args.rowsPerPlayer
         col = rnd
         specialChar = ' ' if not tlineLastInRound.clockedTruncation else '*'
@@ -302,92 +292,61 @@ class TableSummaryGen(SummaryGenBase):
         
 class GridSummaryGen(SummaryGenBase):
 
-    def putRoundNumInHeader(self, rnd):
-        pass
-
-    def putPlayerRoundInfo(self, pidx, rnd, roundMins, waitMins, tlineLastInRound, myColor):
-        pass
-        
     def setupSummary(self):
-        pass
-
+        # compute total number of minutes for tournament
+        tournElapsedMins = int(self.getElapsedMins(1, self.rounds))
+        self.gridGen = GridGen(tournElapsedMins)
+        print(self.gridGen.gridOpen())
+        # data structs that will hold playerRoundInfo
+        self.roundTuples = {}
+        for p in players.keys():
+            self.roundTuples[p] = []
+        
+    def getElapsedMins(self, startRound, endRound):
+        iStartTimes = []
+        iEndTimes = []
+        startBoard = ((startRound - 1) * self.args.bpr) + 1
+        endBoard = endRound * self.args.bpr
+        # get min start
+        for player in map[startBoard].keys():
+            tline = map[startBoard][player]
+            iStartTimes.append(tline.iStartTime)
+        miniStartTime = min(iStartTimes)
+        
+        # get max end
+        for player in map[self.args.boards].keys():
+            tline = map[self.args.boards][player]
+            iEndTimes.append(tline.iEndTime)
+        maxiEndTime = max(iEndTimes)
+        elapsedMins = int(maxiEndTime - miniStartTime)/60
+        if False:
+            print(iEndTimes)
+            print(maxiEndTime, miniStartTime)
+            print(elapsedMins)
+        return elapsedMins
+            
+        
+    def putPlayerRoundInfo(self, player, pidx, rnd, roundMins, waitMins, tlineLastInRound, myColor):
+        specialChar = ' ' if not tlineLastInRound.clockedTruncation else '*'
+        # append a 3-tuple for this player
+        self.roundTuples[player].append((myColor, roundMins, waitMins))
+        
     def renderSummary(self):
         pass
 
     # header for summaries
     def addHeaderInfo(self):
+        # for now, nothing.  Maybe later
         pass
 
     def addPairNameAndTotals(self, pidx, player, totalPlay, totalWait, maxWait):
-        pass
-    
-class BboTimeTravLine(BboTravLineBase):
-    def __init__(self, bdnum, row, travParser):
-        super(BboTimeTravLine, self).__init__(bdnum, row, travParser)
-        self.iEndTime = self.readTime(self.row['Time'])
-        self.waitEndTime = self.iEndTime  # for end of round records this will be adjusted later
-        self.clockedTruncation = False
-        
-    # for end of round tlines, compute dependenciesx
-    def computeWaitEndTime(self, clockedAlg=False):
-        deps = {}
-        if clockedAlg:
-            self.waitEndTime = 0  # will be computed from iEndTimes below
-            # just include everyone as a dependency
-            for player in map[self.bdnum].keys():
-                deps[player] = 1
-        else:
-            # normal unclocked logic, compute dependencies
-            deps[self.origNorth] = 1
-            # find our opp for next round and add that to the deps list
-            nextRoundOpp = opps[self.bdnum+1][self.origNorth]
-            deps[nextRoundOpp] = 1
-            # in the normal algorithm a pair cannot advance unless it current opps can also advance
-            anotherPass = True
-            while anotherPass:
-                startlen = len(deps.keys())
-                if self.args.debug and self.bdnum / self.args.bpr == 1:
-                    print('before', deps)
-                newdeps = {}
-                for dep in deps.keys():
-                    thisRoundOpp = opps[self.bdnum][dep]
-                    thisRoundOppsNextOpp = opps[self.bdnum+1][thisRoundOpp]
-                    newdeps[thisRoundOpp] = 1
-                    newdeps[thisRoundOppsNextOpp] = 1
-                deps.update(newdeps)
-                anotherPass = len(deps.keys()) > startlen
-                if self.args.debug and self.bdnum / self.args.bpr == 1:
-                    print('after', deps)
-
-        # now find the maximum end time for the list of deps
-        for dep in deps.keys():
-            self.waitEndTime = max(self.waitEndTime, map[self.bdnum][dep].iEndTime)
-
-                
-    # addStartTime just uses prev round's end time, + any wait time for first boards in round
-    def addStartTime(self):
-        if self.bdnum == 1:
-            self.iStartTime = self.readTime(self.args.tstart)
-        else:
-            prevTravNorth = map[self.bdnum-1][self.origNorth]
-            self.iStartTime = prevTravNorth.waitEndTime
-
-    def waitMins(self):
-        return (self.waitEndTime - self.iEndTime) / 60
-                
-    def showtime(self, itime):
-        return(time.strftime('%H:%M', time.localtime(itime)))
-
-    def elapsed(self):
-        return (self.iEndTime - self.iStartTime)/60
-        
-    def __str__(self):
-        mystr = ('N:%15s, E:%15s, Start:%5s, End:%5s, Elapsed:%2d, Wait:%2d' % (self.origNorth, self.origEast,
-                                                                                self.showtime(self.iStartTime),
-                                                                                self.showtime(self.iEndTime),
-                                                                                self.iElapsed, self.waitMins() ))
-        return mystr
-
+        # when this is called, all RoundTuples for this player are complete
+        # so we can call gridGen to do a row
+        if False:
+            print(player, self.roundTuples[player])
+            sys.exit(1)
+        rowHtml = self.gridGen.gridRow(player, self.roundTuples[player], f'{int(totalPlay):3} + {int(totalWait):2}', maxWait)
+        print(rowHtml)
     
 
 class GridGen(object):
@@ -426,16 +385,16 @@ class GridGen(object):
         colTemplate = f'repeat({3 + self.rowTime}, 1fr)'
         return self.divOpen('grid-container', {'grid-template-columns': colTemplate, 'width' : '1500px'})
 
-    def gridRow(self, pairName, roundData, tots, max):
-        # basically checks the roundData meets rowTime
+    def gridRow(self, pairName, roundTuples, totsStr, max):
+        # basically checks the roundTuples meets rowTime
         totalTime = 0
         colorSpans = []
-        for (color, playTime, waitTime) in roundData:
+        for (color, playTime, waitTime) in roundTuples:
             colorSpans.append((color, playTime))
             colorSpans.append(('white', waitTime))
             totalTime += (playTime + waitTime)
         if totalTime != self.rowTime:
-            print(f'row {self.rowNum}, roundData does not add up to {self.rowTime}: {roundData}', file=sys.stderr)
+            print(f'row {self.rowNum}, roundTuples does not add up to {self.rowTime}: {roundTuples}', file=sys.stderr)
             if totalTime <= self.rowTime:
                 waitDelta = self.rowTime - totalTime
                 print(f'adding waitTime of {waitDelta} at the end', file=sys.stderr)
@@ -446,7 +405,7 @@ class GridGen(object):
                 print(f'Fatal', file=sys.stderr)
                 sys.exit(1)
         self.rowNum += 1
-        return self.fullRowHtml(pairName, colorSpans, tots, max)
+        return self.fullRowHtml(pairName, colorSpans, totsStr, max)
 
     @staticmethod
     def attrStr(attr, val):
@@ -499,6 +458,74 @@ class GridGen(object):
         for content in [tots, max]:
             s += GridGen.textCellDiv(content)
         return s + '\n'
+
+
+class BboTimeTravLine(BboTravLineBase):
+    def __init__(self, bdnum, row, travParser):
+        super(BboTimeTravLine, self).__init__(bdnum, row, travParser)
+        self.iEndTime = self.readTime(self.row['Time'])
+        self.waitEndTime = self.iEndTime  # for end of round records this will be adjusted later
+        self.clockedTruncation = False
+        
+    # for end of round tlines, compute dependenciesx
+    def computeWaitEndTime(self, clockedAlg=False):
+        deps = {}
+        if clockedAlg:
+            self.waitEndTime = 0  # will be computed from iEndTimes below
+            # just include everyone as a dependency
+            for player in map[self.bdnum].keys():
+                deps[player] = 1
+        else:
+            # normal unclocked logic, compute dependencies
+            deps[self.origNorth] = 1
+            # find our opp for next round and add that to the deps list
+            nextRoundOpp = opps[self.bdnum+1][self.origNorth]
+            deps[nextRoundOpp] = 1
+            # in the normal algorithm a pair cannot advance unless it current opps can also advance
+            anotherPass = True
+            while anotherPass:
+                startlen = len(deps.keys())
+                if self.args.debug and self.bdnum / self.args.bpr == 1:
+                    print('before', deps)
+                newdeps = {}
+                for dep in deps.keys():
+                    thisRoundOpp = opps[self.bdnum][dep]
+                    thisRoundOppsNextOpp = opps[self.bdnum+1][thisRoundOpp]
+                    newdeps[thisRoundOpp] = 1
+                    newdeps[thisRoundOppsNextOpp] = 1
+                deps.update(newdeps)
+                anotherPass = len(deps.keys()) > startlen
+                if self.args.debug and self.bdnum / self.args.bpr == 1:
+                    print('after', deps)
+
+        # now find the maximum end time for the list of deps
+        for dep in deps.keys():
+            self.waitEndTime = max(self.waitEndTime, map[self.bdnum][dep].iEndTime)
+
+                
+    # addStartTime just uses prev round's end time, + any wait time for first boards in round
+    def addStartTime(self):
+        if self.bdnum == 1:
+            self.iStartTime = self.readTime(self.args.tstart)
+        else:
+            prevTravNorth = map[self.bdnum-1][self.origNorth]
+            self.iStartTime = prevTravNorth.waitEndTime
+
+    def waitMins(self):
+        return int((self.waitEndTime - self.iEndTime) / 60)
+                
+    def showtime(self, itime):
+        return(time.strftime('%H:%M', time.localtime(itime)))
+
+    def elapsed(self):
+        return (self.iEndTime - self.iStartTime)/60
+        
+    def __str__(self):
+        mystr = ('N:%15s, E:%15s, Start:%5s, End:%5s, Elapsed:%2d, Wait:%2d' % (self.origNorth, self.origEast,
+                                                                                self.showtime(self.iStartTime),
+                                                                                self.showtime(self.iEndTime),
+                                                                                self.iElapsed, self.waitMins() ))
+        return mystr
 
     
 #-------- main stuff starts here -----------
