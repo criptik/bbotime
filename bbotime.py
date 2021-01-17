@@ -29,6 +29,7 @@ map = {}
 players = {}
 partners = {}
 opps = {}
+noPlays = {}
 
 class BboTimeReporter(BboBase):
     def appDescription(self):
@@ -41,6 +42,7 @@ class BboTimeReporter(BboBase):
         parser.add_argument('--minsPerBoard', default=6, type=int, help='minutes allowed per board (for simclocked)')
         parser.add_argument('--showTimeline', default=False, action='store_true', help='use grid to show timelines')
         parser.add_argument('--noRoundLabels', default=False, action='store_true', help='avoid round labels in timeline')
+        parser.add_argument('--incLastRoundWait', default=False, action='store_true', help='include last round waiting in totals and max')
 
     def childArgsFix(self):
         # build default start time from directory name (if start time not supplied in args)
@@ -52,7 +54,18 @@ class BboTimeReporter(BboBase):
 
     def childStyleInfo(self):
         return (GridGen.styleInfo() if self.args.showTimeline else '')
-        
+
+    def noPlaysInit(self):
+        for player in players:
+            noPlays[player] = set()
+            
+    def noPlaysAdd(self, player, bdnum):
+        noPlays[player].add(bdnum)
+
+    def tournDesc(self):
+        rounds = int(self.args.boards/self.args.bpr)
+        return f'{self.args.tstart}, {self.args.boards} Boards, {rounds} Rounds of {self.args.bpr}' 
+
     def childGenReport(self):
         # check whether these datafiles support the time field which we need
         if not self.supportsTimeField():
@@ -64,11 +77,13 @@ class BboTimeReporter(BboBase):
         # at this point the robot names are fixed up if they could be
         # so proceed as if there was no duplication of names
         BboTimeTravLine.importArgs(self.args)
-
+        
         for bdnum in range (1, self.args.boards + 1):
             # place rows in big table indexed by boardnumber and North and East names
             for row in self.travTableData[bdnum]:
                 self.addToMaps(bdnum, row)
+
+        self.noPlaysInit()
 
         # With all files processed and in maps, go thru list of BboTimeTravLine objects
         # and compute WaitEndTime (for end of round tlines)
@@ -82,12 +97,15 @@ class BboTimeReporter(BboBase):
                         tline.computeWaitEndTime()
 
         # now startTimes
+        # and while we're at it, count noplays
         for bdnum in range (1, self.args.boards + 1):
             for player in map[bdnum].keys():
                 tline = map[bdnum][player]
                 if player == tline.origNorth:
                     tline.addStartTime()
                     tline.iElapsed = tline.elapsed()
+                if tline.isNoPlay:
+                    self.noPlaysAdd(player, bdnum)
 
         if self.args.debug:
             self.printMap()
@@ -95,9 +113,10 @@ class BboTimeReporter(BboBase):
         summaryGen = TableSummaryGen(self.args) if not self.args.showTimeline else GridSummaryGen(self.args)
         
         self.printHTMLOpening()
-        summaryGen.printSummary(f'\nUnclocked Report for {self.args.tstart}')
+        summaryGen.printSummary(f'\nUnclocked Report for {self.tournDesc()}')
         
         if self.args.simclocked:
+            self.noPlaysInit()
             #  compute endTime using clocked algorithm
             nextEndTime = {}
 
@@ -122,7 +141,11 @@ class BboTimeReporter(BboBase):
                         if self.args.debug:
                             print('exceed clocked time limit:', bdnum, player, (unclockedEndTime-roundStartTime)/60, (clockedEndTimeLimit-roundStartTime)/60)
                         tline.iElapsed -= (unclockedEndTime - clockedEndTimeLimit)/60
-                        tline.clockedTruncation = True 
+                        tline.clockedTruncation = True
+                        self.noPlaysAdd(player, bdnum)
+                        # also add the opponent since we won't come thru here for them
+                        self.noPlaysAdd(opps[bdnum][player], bdnum)
+                        
                     if self.args.debug:
                         print(f'bdnum {bdnum}, player {player}, {tline}')
 
@@ -135,9 +158,16 @@ class BboTimeReporter(BboBase):
                             # print(bdnum, player, (tline.iEndTime-roundStartTime)/60)
                             tline.computeWaitEndTime(clockedAlg=True)
 
+                if False and bdnum == self.args.boards:
+                    for player in players:
+                        if len(noPlays[player]) > 0:
+                            print(player, noPlays[player], file=sys.stderr)
+                    
             if self.args.debug:
                 self.printMap()
-            summaryGen.printSummary(f'\n\nClocked Simulation for {self.args.tstart} with {self.args.minsPerBoard} minutes per board')
+            # get a new summaryGen because total tourney time might have changed
+            summaryGen = TableSummaryGen(self.args) if not self.args.showTimeline else GridSummaryGen(self.args)
+            summaryGen.printSummary(f'\n\nClocked Simulation for {self.tournDesc()}, with {self.args.minsPerBoard} minutes per board time limit')
 
         self.printHTMLClosing()
 
@@ -206,14 +236,15 @@ class SummaryGenBase(ABC):
             totalWait += waitMins
             myColor = self.colorDicts[rnd-1][player]
             # if last round, check totals and increase last wait if needed
-            if rnd == self.rounds and (totalPlay + totalWait) < self.tournElapsedMins:
+            # for now, we don't want to include this extra time in totalWait or maxWait
+            if self.args.incLastRoundWait and rnd == self.rounds and (totalPlay + totalWait) < self.tournElapsedMins:
                 waitDelta = self.tournElapsedMins - (totalPlay + totalWait)
                 waitMins += waitDelta
                 totalWait += waitDelta
             maxWait = max(maxWait, waitMins)
             self.putPlayerRoundInfo(player, pidx, rnd, roundMins, waitMins, tlineLastInRound, myColor)
 
-        self.addPairNameAndTotals(pidx, player, totalPlay, totalWait, maxWait)
+        self.addPairNameAndTotals(pidx, player, totalPlay, totalWait, maxWait, len(noPlays[player]))
         
     # return elapsedTime and waitTime for that round for a given player
     def roundElapsedMins(self, rnd, player):
@@ -266,7 +297,7 @@ class SummaryGenBase(ABC):
         pass
 
     @abstractmethod    
-    def addPairNameAndTotals(self, pidx, player, totalPlay, totalWait, maxWait):
+    def addPairNameAndTotals(self, pidx, player, totalPlay, totalWait, maxWait, numNoPlays):
         pass
     
 class TableSummaryGen(SummaryGenBase):
@@ -315,7 +346,7 @@ class TableSummaryGen(SummaryGenBase):
         # this works better than using span
         self.tab[row][col] = f'background-color:{myColor} {int(roundMins):2}{specialChar}+{int(waitMins):2}'
 
-    def addPairNameAndTotals(self, pidx, player, totalPlay, totalWait, maxWait):
+    def addPairNameAndTotals(self, pidx, player, totalPlay, totalWait, maxWait, numNoPlays):
         row = self.hdrRows + pidx * self.args.rowsPerPlayer
         self.tab[row][0] = player
         self.tab[row][-2] = f'  {int(totalPlay):3} + {int(totalWait):2}'
@@ -326,7 +357,7 @@ class GridSummaryGen(SummaryGenBase):
 
     def setupSummary(self):
         # compute total number of minutes for tournament
-        self.gridGen = GridGen(self.tournElapsedMins)
+        self.gridGen = GridGen(self.args, self.tournElapsedMins)
         self.html = ''
         self.html += self.gridGen.gridOpen()
         # data structs that will hold playerRoundInfo
@@ -337,8 +368,8 @@ class GridSummaryGen(SummaryGenBase):
         
     def putPlayerRoundInfo(self, player, pidx, rnd, roundMins, waitMins, tlineLastInRound, myColor):
         specialChar = ' ' if not tlineLastInRound.clockedTruncation else '*'
-        # append a 3-tuple for this player
-        self.roundTuples[player].append((myColor, roundMins, waitMins))
+        # append a 4-tuple for this player
+        self.roundTuples[player].append((myColor, roundMins, waitMins, specialChar))
         
     def renderSummary(self):
         self.html += self.gridGen.gridClose()
@@ -349,19 +380,20 @@ class GridSummaryGen(SummaryGenBase):
         # for now, nothing.  Maybe later
         pass
 
-    def addPairNameAndTotals(self, pidx, player, totalPlay, totalWait, maxWait):
+    def addPairNameAndTotals(self, pidx, player, totalPlay, totalWait, maxWait, numNoPlays):
         # when this is called, all RoundTuples for this player are complete
         # so we can call gridGen to do a row
         if False:
             print(player, self.roundTuples[player])
             sys.exit(1)
         addLabels = not self.args.noRoundLabels
-        rowHtml = self.gridGen.gridRow(player, self.roundTuples[player], f'{int(totalPlay):3} + {int(totalWait):2}', maxWait, addLabels)
+        rowHtml = self.gridGen.gridRow(player, self.roundTuples[player], f'{int(totalPlay):3} + {int(totalWait):2}', maxWait, numNoPlays, addLabels)
         self.html += rowHtml
     
 
 class GridGen(object):
-    def __init__(self, rowTime):
+    def __init__(self, args, rowTime):
+        self.args = args
         self.rowTime = rowTime
         self.rowNum = 1
 
@@ -403,31 +435,35 @@ class GridGen(object):
         '''
 
     def gridOpen(self):
-        # +3 here because of name, tot, max columns
-        colTemplate = f'repeat({3 + self.rowTime}, 1fr)'
+        # +4 here because of name, tot, max, numNoPlays columns
+        colTemplate = f'repeat({4 + self.rowTime}, 1fr)'
         return self.divOpen('grid-container', {'grid-template-columns': colTemplate, 'width' : '1500px'})
 
     def gridClose(self):
         return self.divClose()
 
-    def gridRow(self, pairName, roundTuples, totsStr, max, addLabels=True):
-        # basically checks the roundTuples meets rowTime
+    def gridRow(self, pairName, roundTuples, totsStr, max, numNoPlays, addLabels=True):
+        # create the colorspans and also check the roundTuples meets rowTime
         totalTime = 0
         colorSpans = []
         roundSpans = []
-        for (color, playTime, waitTime) in roundTuples:
-            colorSpans.append((color, playTime))
-            colorSpans.append(('white', waitTime))
+        for (color, playTime, waitTime, specialChar) in roundTuples:
+            if specialChar == ' ':
+                specialChar = ''
+            colorSpans.append((color, playTime, specialChar))
+            colorSpans.append(('white', waitTime, ''))
             roundTime = playTime + waitTime
             roundSpans.append(roundTime)
             totalTime += roundTime
         if totalTime != self.rowTime:
-            print(f'row {self.rowNum}, roundTuples does not add up to {self.rowTime}: {roundTuples}', file=sys.stderr)
+            if self.args.debug or totalTime > self.rowTime:
+                print(f'row {self.rowNum}, roundTuples does not add up to {self.rowTime}: {roundTuples}', file=sys.stderr)
             if totalTime <= self.rowTime:
                 waitDelta = self.rowTime - totalTime
-                print(f'adding waitTime of {waitDelta} at the end', file=sys.stderr)
-                (color, oldWaitTime) = colorSpans.pop()
-                colorSpans.append((color, oldWaitTime + waitDelta))
+                if self.args.debug:
+                    print(f'adding waitTime of {waitDelta} at the end', file=sys.stderr)
+                (color, oldWaitTime, specialChar) = colorSpans.pop()
+                colorSpans.append((color, oldWaitTime + waitDelta, specialChar))
                 # do similarly for roundSpans
                 oldRoundSpan = roundSpans.pop()
                 roundSpans.append(oldRoundSpan + waitDelta)
@@ -438,7 +474,7 @@ class GridGen(object):
         self.rowNum += 1
         if not addLabels:
             roundSpans = None
-        return self.fullRowHtml(pairName, colorSpans, roundSpans, totsStr, max)
+        return self.fullRowHtml(pairName, colorSpans, roundSpans, totsStr, max, numNoPlays)
 
     @staticmethod
     def attrStr(attr, val):
@@ -475,7 +511,7 @@ class GridGen(object):
         return GridGen.divFull('divtext', styles, content)
 
     @staticmethod
-    def fullRowHtml(pairName, colorSpans, roundSpans, tots, max):
+    def fullRowHtml(pairName, colorSpans, roundSpans, tots, max, numNoPlays):
         nameRowSpan = 2 if roundSpans is not None else 1
         nameCellStyles = {
             'grid-area': f' auto / 1 / span {nameRowSpan} / span 1',
@@ -490,15 +526,16 @@ class GridGen(object):
             # tots and max labels
             s += GridGen.divFull('roundnum', {'grid-column-end' : f'span 1'}, 'Totals')
             s += GridGen.divFull('roundnum', {'grid-column-end' : f'span 1'}, 'Max')
+            s += GridGen.divFull('roundnum', {'grid-column-end' : f'span 1'}, 'NP')
 
-        for (color, spanAmt) in colorSpans:
+        for (color, spanAmt, specialChar) in colorSpans:
             if spanAmt == 0:
                 continue
             styles = {}
             styles['background-color'] = color
             styles['grid-column-end'] = f'span {spanAmt}'
-            s += GridGen.divFull(None, styles, f'{spanAmt}')
-        for content in [tots, max]:
+            s += GridGen.divFull(None, styles, f'{spanAmt}{specialChar}')
+        for content in [tots, max, numNoPlays]:
             s += GridGen.textCellDiv(content)
         return s + '\n'
 

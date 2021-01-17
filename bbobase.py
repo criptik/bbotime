@@ -220,11 +220,14 @@ class BboTravLineBase(object):
         self.resultStr = resstr
         if self.args.debug:
             print(resstr, len(resstr))
-        if resstr.startswith('PASS') or resstr.startswith('A'):
+        self.isNoPlay = False
+        if resstr.startswith('PASS') or resstr.startswith('A=='):
             # special case for passed out or averages
             self.contract = self.dblstr = self.decl = self.trumpstr = None
             self.result = 0
             self.tricks = 0
+            if resstr.startswith('A=='):
+                self.isNoPlay = True
         else:
             # normal (not passed out) hands
             m = re.search(r'([0-9])(.*?)(x{0,2})([NSEW])(=|\+[0-9]*|\-[0-9]*)', resstr)
