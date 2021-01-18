@@ -40,10 +40,9 @@ class BboTimeReporter(BboBase):
         parser.add_argument('--simclocked', default=False, action='store_true', help='afterwards simulate as if clocked had been used')
         parser.add_argument('--rowsPerPlayer', default=1, type=int, help='rows per player in table')
         parser.add_argument('--minsPerBoard', default=6, type=int, help='minutes allowed per board (for simclocked)')
-        parser.add_argument('--showTimeline', default=False, action='store_true', help='use grid to show timelines')
+        parser.add_argument('--summaryType', default='TimelineGrid', nargs='+', help='type of summary or summaries to generate (TimelineGrid, FixedWidthGrid, Table)')
         parser.add_argument('--noRoundLabels', default=False, action='store_true', help='avoid round labels in timeline')
         parser.add_argument('--incLastRoundWait', default=False, action='store_true', help='include last round waiting in totals and max')
-        parser.add_argument('--legacyFixedWidth', default=False, action='store_true', help='use legacy html table based fixed width summary')
 
     def childArgsFix(self):
         # build default start time from directory name (if start time not supplied in args)
@@ -67,9 +66,10 @@ class BboTimeReporter(BboBase):
         rounds = int(self.args.boards/self.args.bpr)
         return f'{self.args.tstart}, {self.args.boards} Boards, {rounds} Rounds of {self.args.bpr}' 
 
-    def createSummaryGen(self):
-        return TableSummaryGen(self.args) if self.args.legacyFixedWidth else FixedWidthGridSummaryGen(self.args) if not self.args.showTimeline else TimelineGridSummaryGen(self.args)
-
+    def createSummaryGen(self, sumName):
+        sumGenClass = globals()[f'{sumName}SummaryGen']
+        return sumGenClass(self.args)
+    
     def childGenReport(self):
         # check whether these datafiles support the time field which we need
         if not self.supportsTimeField():
@@ -114,10 +114,11 @@ class BboTimeReporter(BboBase):
         if self.args.debug:
             self.printMap()
 
-        summaryGen = self.createSummaryGen()
-        
         self.printHTMLOpening()
-        summaryGen.printSummary(f'\nUnclocked Report for {self.tournDesc()}')
+
+        for sumName in self.args.summaryType:
+            summaryGen = self.createSummaryGen(sumName)
+            summaryGen.printSummary(f'\nUnclocked Report for {self.tournDesc()}')
         
         if self.args.simclocked:
             self.noPlaysInit()
@@ -169,9 +170,11 @@ class BboTimeReporter(BboBase):
                     
             if self.args.debug:
                 self.printMap()
-            # get a new summaryGen because total tourney time might have changed
-            summaryGen = self.createSummaryGen()
-            summaryGen.printSummary(f'\n\nClocked Simulation for {self.tournDesc()}, with {self.args.minsPerBoard} minutes per board time limit')
+
+            for sumName in self.args.summaryType:
+                # get a new summaryGen because total tourney time might have changed
+                summaryGen = self.createSummaryGen(sumName)
+                summaryGen.printSummary(f'\n\nClocked Simulation for {self.tournDesc()}, with {self.args.minsPerBoard} minutes per board time limit')
 
         self.printHTMLClosing()
 
@@ -470,7 +473,7 @@ class FixedWidthGridSummaryGen(GridSummaryGenBase):
         if not addLabels or self.rowNum > 1:
             roundSpans = None
         else:
-            # each roundspan in no-timeline mode is span 1
+            # each roundspan in no-timeline mode is a fixed span
             for roundnum in range(1, self.rounds+1):
                 roundSpans.append(self.getFixedRoundSpan())
 
