@@ -53,7 +53,7 @@ class BboTimeReporter(BboBase):
 
 
     def childStyleInfo(self):
-        return (GridGen.styleInfo() if self.args.showTimeline else '')
+        return (GridGenBase.styleInfo())
 
     def noPlaysInit(self):
         for player in players:
@@ -65,6 +65,9 @@ class BboTimeReporter(BboBase):
     def tournDesc(self):
         rounds = int(self.args.boards/self.args.bpr)
         return f'{self.args.tstart}, {self.args.boards} Boards, {rounds} Rounds of {self.args.bpr}' 
+
+    def createSummaryGen(self):
+        return FixedWidthGridSummaryGen(self.args) if not self.args.showTimeline else TimelineGridSummaryGen(self.args)
 
     def childGenReport(self):
         # check whether these datafiles support the time field which we need
@@ -110,7 +113,7 @@ class BboTimeReporter(BboBase):
         if self.args.debug:
             self.printMap()
 
-        summaryGen = TableSummaryGen(self.args) if not self.args.showTimeline else GridSummaryGen(self.args)
+        summaryGen = self.createSummaryGen()
         
         self.printHTMLOpening()
         summaryGen.printSummary(f'\nUnclocked Report for {self.tournDesc()}')
@@ -166,7 +169,7 @@ class BboTimeReporter(BboBase):
             if self.args.debug:
                 self.printMap()
             # get a new summaryGen because total tourney time might have changed
-            summaryGen = TableSummaryGen(self.args) if not self.args.showTimeline else GridSummaryGen(self.args)
+            summaryGen = self.createSummaryGen()
             summaryGen.printSummary(f'\n\nClocked Simulation for {self.tournDesc()}, with {self.args.minsPerBoard} minutes per board time limit')
 
         self.printHTMLClosing()
@@ -299,7 +302,8 @@ class SummaryGenBase(ABC):
     @abstractmethod    
     def addPairNameAndTotals(self, pidx, player, totalPlay, totalWait, maxWait, numNoPlays):
         pass
-    
+
+# the original gen using html tables (only works for non-timeline view)
 class TableSummaryGen(SummaryGenBase):
     def setupSummary(self):
         self.numcols = self.rounds + 3  # add in name and totals and max
@@ -352,12 +356,12 @@ class TableSummaryGen(SummaryGenBase):
         self.tab[row][-2] = f'  {int(totalPlay):3} + {int(totalWait):2}'
         self.tab[row][-1] = f'{int(maxWait):2}'
 
-        
-class GridSummaryGen(SummaryGenBase):
+# base class for grid generation summaries (timeline and no-timeline_        
+class GridSummaryGenBase(SummaryGenBase):
 
     def setupSummary(self):
         # compute total number of minutes for tournament
-        self.gridGen = GridGen(self.args, self.tournElapsedMins)
+        self.gridGen = self.createGridGen()
         self.html = ''
         self.html += self.gridGen.gridOpen()
         # data structs that will hold playerRoundInfo
@@ -389,13 +393,28 @@ class GridSummaryGen(SummaryGenBase):
         addLabels = not self.args.noRoundLabels
         rowHtml = self.gridGen.gridRow(player, self.roundTuples[player], f'{int(totalPlay):3} + {int(totalWait):2}', maxWait, numNoPlays, addLabels)
         self.html += rowHtml
-    
 
-class GridGen(object):
+    @abstractmethod
+    def createGridGen(self):
+        pass
+
+
+class TimelineGridSummaryGen(GridSummaryGenBase):
+    def createGridGen(self):
+        return TimelineGridGen(self.args, self.tournElapsedMins)        
+
+
+class FixedWidthGridSummaryGen(GridSummaryGenBase):
+    def createGridGen(self):
+        return FixedWidthGridGen(self.args, self.tournElapsedMins)        
+
+
+class GridGenBase(ABC):
     def __init__(self, args, rowTime):
         self.args = args
         self.rowTime = rowTime
         self.rowNum = 1
+        self.rounds = int(self.args.boards/self.args.bpr)
 
     @classmethod
     def styleInfo(cls):
@@ -436,12 +455,85 @@ class GridGen(object):
 
     def gridOpen(self):
         # +4 here because of name, tot, max, numNoPlays columns
-        colTemplate = f'repeat({4 + self.rowTime}, 1fr)'
+        colTemplate = self.getColTemplate()
         return self.divOpen('grid-container', {'grid-template-columns': colTemplate, 'width' : '1500px'})
 
+    @abstractmethod
+    def getColTemplate(self):
+        pass
+    
     def gridClose(self):
         return self.divClose()
 
+    @abstractmethod
+    def gridRow(self, pairName, roundTuples, totsStr, max, numNoPlays, addLabels=True):
+        pass
+    
+
+    def attrStr(self, attr, val):
+        return f'{attr}="{val}"'
+
+    def divOpen(self, divcls=None, styles=None, finalcr=True):
+        classStr =  styleStr = ''
+        if divcls is not None:
+            classStr = self.attrStr('class', divcls)
+        if styles is not None:
+            stylist = ''
+            for sty in styles.keys():
+                stylist += f'{sty}:{styles[sty]}; '
+            styleStr = self.attrStr('style', stylist)
+        divStr = f'<div {classStr} {styleStr}>'
+        if finalcr:
+            divStr += '\n'
+        return divStr
+
+    def divClose(self):
+        return '</div>'
+
+    def divFull(self, divcls=None, styles=None, content=''):
+        return f'{self.divOpen(divcls, styles, False)}{content}{self.divClose()}\n'
+
+
+    def textCellDiv(self, content):
+        styles={}
+        styles['grid-column-end'] = 'span 1'
+        return self.divFull('divtext', styles, content)
+
+    def fullRowHtml(self, pairName, colorSpans, roundSpans, tots, max, numNoPlays):
+        nameRowSpan = 2 if roundSpans is not None else 1
+        nameCellStyles = {
+            'grid-area': f' auto / 1 / span {nameRowSpan} / span 1',
+        }
+        s = ''
+        s += self.divFull('divtext', nameCellStyles, pairName)
+        # do the round Labels if specified
+        if roundSpans is not None:
+            for (rndidx, roundSpan) in enumerate(roundSpans):
+                cls = 'roundnum round1' if rndidx == 0 else 'roundnum'
+                s += self.divFull('roundnum', {'grid-column-end' : f'span {roundSpan}'}, f'R{rndidx+1}')
+            # tots and max labels
+            s += self.divFull('roundnum', {'grid-column-end' : f'span 1'}, 'Totals')
+            s += self.divFull('roundnum', {'grid-column-end' : f'span 1'}, 'Max')
+            s += self.divFull('roundnum', {'grid-column-end' : f'span 1'}, 'NP')
+
+        for (color, spanAmt, content) in colorSpans:
+            if spanAmt == 0:
+                continue
+            styles = {}
+            styles['background-color'] = color
+            styles['grid-column-end'] = f'span {spanAmt}'
+            s += self.divFull(None, styles, content)
+        # fill in the rightmost cols
+        for content in [tots, max, numNoPlays]:
+            s += self.textCellDiv(content)
+        return s + '\n'
+
+# class which uses Grid to create a timeline
+class TimelineGridGen(GridGenBase):
+    def getColTemplate(self):
+        colTemplate = f'repeat({4 + self.rowTime}, 1fr)'
+        return colTemplate
+    
     def gridRow(self, pairName, roundTuples, totsStr, max, numNoPlays, addLabels=True):
         # create the colorspans and also check the roundTuples meets rowTime
         totalTime = 0
@@ -450,8 +542,9 @@ class GridGen(object):
         for (color, playTime, waitTime, specialChar) in roundTuples:
             if specialChar == ' ':
                 specialChar = ''
-            colorSpans.append((color, playTime, specialChar))
-            colorSpans.append(('white', waitTime, ''))
+            content = f'{playTime}{specialChar}'
+            colorSpans.append((color, playTime, content))
+            colorSpans.append(('white', waitTime, f'{waitTime}'))
             roundTime = playTime + waitTime
             roundSpans.append(roundTime)
             totalTime += roundTime
@@ -462,8 +555,9 @@ class GridGen(object):
                 waitDelta = self.rowTime - totalTime
                 if self.args.debug:
                     print(f'adding waitTime of {waitDelta} at the end', file=sys.stderr)
-                (color, oldWaitTime, specialChar) = colorSpans.pop()
-                colorSpans.append((color, oldWaitTime + waitDelta, specialChar))
+                (color, oldWaitTime, oldContent) = colorSpans.pop()
+                newWaitTime = oldWaitTime + waitDelta
+                colorSpans.append((color, newWaitTime, f'{newWaitTime}'))
                 # do similarly for roundSpans
                 oldRoundSpan = roundSpans.pop()
                 roundSpans.append(oldRoundSpan + waitDelta)
@@ -476,70 +570,37 @@ class GridGen(object):
             roundSpans = None
         return self.fullRowHtml(pairName, colorSpans, roundSpans, totsStr, max, numNoPlays)
 
-    @staticmethod
-    def attrStr(attr, val):
-        return f'{attr}="{val}"'
 
-    @staticmethod
-    def divOpen(cls=None, styles=None, finalcr=True):
-        classStr =  styleStr = ''
-        if cls is not None:
-            classStr = GridGen.attrStr('class', cls)
-        if styles is not None:
-            stylist = ''
-            for sty in styles.keys():
-                stylist += f'{sty}:{styles[sty]}; '
-            styleStr = GridGen.attrStr('style', stylist)
-        divStr = f'<div {classStr} {styleStr}>'
-        if finalcr:
-            divStr += '\n'
-        return divStr
+# class which uses Grid to create a non-timeline view
+class FixedWidthGridGen(GridGenBase):
+    def getFixedRoundSpan(self):
+        return 3
 
-    @staticmethod
-    def divClose():
-        return '</div>'
+    def getColTemplate(self):
+        colTemplate = f'repeat({4 + (self.rounds * self.getFixedRoundSpan())}, 1fr)'
+        return colTemplate
 
-    @staticmethod
-    def divFull(cls=None, styles=None, content=''):
-        return f'{GridGen.divOpen(cls, styles, False)}{content}{GridGen.divClose()}\n'
+    def gridRow(self, pairName, roundTuples, totsStr, max, numNoPlays, addLabels=True):
+        # create the colorspans and also check the roundTuples meets rowTime
+        totalTime = 0
+        colorSpans = []
+        roundSpans = []
+        for (color, playTime, waitTime, specialChar) in roundTuples:
+            if specialChar == ' ':
+                specialChar = ''
+            content = f'{playTime}{specialChar} + {waitTime}'
+            colorSpans.append((color, self.getFixedRoundSpan(), content))
+        if not addLabels or self.rowNum > 1:
+            roundSpans = None
+        else:
+            # each roundspan in no-timeline mode is span 1
+            for roundnum in range(1, self.rounds+1):
+                roundSpans.append(self.getFixedRoundSpan())
 
-
-    @staticmethod
-    def textCellDiv(content):
-        styles={}
-        styles['grid-column-end'] = 'span 1'
-        return GridGen.divFull('divtext', styles, content)
-
-    @staticmethod
-    def fullRowHtml(pairName, colorSpans, roundSpans, tots, max, numNoPlays):
-        nameRowSpan = 2 if roundSpans is not None else 1
-        nameCellStyles = {
-            'grid-area': f' auto / 1 / span {nameRowSpan} / span 1',
-        }
-        s = ''
-        s += GridGen.divFull('divtext', nameCellStyles, pairName)
-        # do the round Labels if specified
-        if roundSpans is not None:
-            for (rndidx, roundSpan) in enumerate(roundSpans):
-                cls = 'roundnum round1' if rndidx == 0 else 'roundnum'
-                s += GridGen.divFull('roundnum', {'grid-column-end' : f'span {roundSpan}'}, f'R{rndidx+1}')
-            # tots and max labels
-            s += GridGen.divFull('roundnum', {'grid-column-end' : f'span 1'}, 'Totals')
-            s += GridGen.divFull('roundnum', {'grid-column-end' : f'span 1'}, 'Max')
-            s += GridGen.divFull('roundnum', {'grid-column-end' : f'span 1'}, 'NP')
-
-        for (color, spanAmt, specialChar) in colorSpans:
-            if spanAmt == 0:
-                continue
-            styles = {}
-            styles['background-color'] = color
-            styles['grid-column-end'] = f'span {spanAmt}'
-            s += GridGen.divFull(None, styles, f'{spanAmt}{specialChar}')
-        for content in [tots, max, numNoPlays]:
-            s += GridGen.textCellDiv(content)
-        return s + '\n'
-
-
+        self.rowNum += 1
+        return self.fullRowHtml(pairName, colorSpans, roundSpans, totsStr, max, numNoPlays)
+    
+# traveller line specialization for bbotime
 class BboTimeTravLine(BboTravLineBase):
     def __init__(self, bdnum, row, travParser):
         super(BboTimeTravLine, self).__init__(bdnum, row, travParser)
