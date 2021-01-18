@@ -118,7 +118,7 @@ class BboTimeReporter(BboBase):
 
         for sumName in self.args.summaryType:
             summaryGen = self.createSummaryGen(sumName)
-            summaryGen.printSummary(f'\nUnclocked Report for {self.tournDesc()}')
+            summaryGen.printSummary(f'\nUnclocked Report for {self.tournDesc()}, {sumName} View')
         
         if self.args.simclocked:
             self.noPlaysInit()
@@ -174,7 +174,7 @@ class BboTimeReporter(BboBase):
             for sumName in self.args.summaryType:
                 # get a new summaryGen because total tourney time might have changed
                 summaryGen = self.createSummaryGen(sumName)
-                summaryGen.printSummary(f'\n\nClocked Simulation for {self.tournDesc()}, with {self.args.minsPerBoard} minutes per board time limit')
+                summaryGen.printSummary(f'\n\nClocked Simulation for {self.tournDesc()}, with {self.args.minsPerBoard} minutes per board time limit, {sumName} View')
 
         self.printHTMLClosing()
 
@@ -477,8 +477,13 @@ class FixedWidthGridSummaryGen(GridSummaryGenBase):
             for roundnum in range(1, self.rounds+1):
                 roundSpans.append(self.getFixedRoundSpan())
 
+        htmlStr = ''
+        if self.rowNum == 1:
+            # break labels out separately here
+            htmlStr = self.gridGen.fullRowHtml('Name', None, roundSpans, '', '', '')
+        htmlStr += self.gridGen.fullRowHtml(pairName, colorSpans, None, totsStr, max, numNoPlays)
         self.rowNum += 1
-        return self.gridGen.fullRowHtml(pairName, colorSpans, roundSpans, totsStr, max, numNoPlays)
+        return htmlStr
     
 
 class GridGen(object):
@@ -560,12 +565,14 @@ class GridGen(object):
         return self.divFull('divtext', styles, content)
 
     def fullRowHtml(self, pairName, colorSpans, roundSpans, tots, max, numNoPlays):
-        nameRowSpan = 2 if roundSpans is not None else 1
+        nameRowSpan = 2 if roundSpans is not None and colorSpans is not None else 1
         nameCellStyles = {
             'grid-area': f' auto / 1 / span {nameRowSpan} / span 1',
         }
+        # name cell clas changes  when standalone label row asked for
+        nameCellClass = 'divtext' if colorSpans is not None else 'roundnum'
         s = ''
-        s += self.divFull('divtext', nameCellStyles, pairName)
+        s += self.divFull(nameCellClass, nameCellStyles, pairName)
         # do the round Labels if specified
         if roundSpans is not None:
             for (rndidx, roundSpan) in enumerate(roundSpans):
@@ -576,16 +583,17 @@ class GridGen(object):
             s += self.divFull('roundnum', {'grid-column-end' : f'span 1'}, 'Max')
             s += self.divFull('roundnum', {'grid-column-end' : f'span 1'}, 'NP')
 
-        for (color, spanAmt, content) in colorSpans:
-            if spanAmt == 0:
-                continue
-            styles = {}
-            styles['background-color'] = color
-            styles['grid-column-end'] = f'span {spanAmt}'
-            s += self.divFull(None, styles, content)
-        # fill in the rightmost cols
-        for content in [tots, max, numNoPlays]:
-            s += self.textCellDiv(content)
+        if colorSpans is not None:
+            for (color, spanAmt, content) in colorSpans:
+                if spanAmt == 0:
+                    continue
+                styles = {}
+                styles['background-color'] = color
+                styles['grid-column-end'] = f'span {spanAmt}'
+                s += self.divFull(None, styles, content)
+            # fill in the rightmost cols
+            for content in [tots, max, numNoPlays]:
+                s += self.textCellDiv(content)
         return s + '\n'
 
 # traveller line specialization for bbotime
