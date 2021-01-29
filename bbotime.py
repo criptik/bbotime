@@ -40,7 +40,7 @@ class BboTimeReporter(BboBase):
         parser.add_argument('--simclocked', default=False, action='store_true', help='afterwards simulate as if clocked had been used')
         parser.add_argument('--rowsPerPlayer', default=1, type=int, help='rows per player in table')
         parser.add_argument('--minsPerBoard', default=6, type=int, help='minutes allowed per board (for simclocked)')
-        parser.add_argument('--summaryType', default='TimelineGrid', nargs='+', help='type of summary or summaries to generate (TimelineGrid, FixedWidthGrid, Table)')
+        parser.add_argument('--summaryType', default=['TimelineGrid'], nargs='+', help='type of summary or summaries to generate (TimelineGrid, FixedWidthGrid, Table)')
         parser.add_argument('--noRoundLabels', default=False, action='store_true', help='avoid round labels in timeline')
         parser.add_argument('--incLastRoundWait', default=False, action='store_true', help='include last round waiting in totals and max')
 
@@ -147,6 +147,10 @@ class BboTimeReporter(BboBase):
                             print('exceed clocked time limit:', bdnum, player, (unclockedEndTime-roundStartTime)/60, (clockedEndTimeLimit-roundStartTime)/60)
                         tline.iElapsed -= (unclockedEndTime - clockedEndTimeLimit)/60
                         tline.clockedTruncation = True
+                        self.noPlaysAdd(player, bdnum)
+                        # also add the opponent since we won't come thru here for them
+                        self.noPlaysAdd(opps[bdnum][player], bdnum)
+                    if tline.isNoPlay:
                         self.noPlaysAdd(player, bdnum)
                         # also add the opponent since we won't come thru here for them
                         self.noPlaysAdd(opps[bdnum][player], bdnum)
@@ -350,7 +354,7 @@ class TableSummaryGen(SummaryGenBase):
     def putPlayerRoundInfo(self, player, pidx, rnd, roundMins, waitMins, tlineLastInRound, myColor):
         row = self.hdrRows + pidx * self.args.rowsPerPlayer
         col = rnd
-        specialChar = ' ' if not tlineLastInRound.clockedTruncation else '*'
+        specialChar = '*' if tlineLastInRound.clockedTruncation or tlineLastInRound.isNoPlay else ' '
         # add a background-color in the cell data which will later be moved into the <td> element
         # this works better than using span
         self.tab[row][col] = f'background-color:{myColor} {int(roundMins):2}{specialChar}+{int(waitMins):2}'
@@ -376,7 +380,7 @@ class GridSummaryGenBase(SummaryGenBase):
         
         
     def putPlayerRoundInfo(self, player, pidx, rnd, roundMins, waitMins, tlineLastInRound, myColor):
-        specialChar = ' ' if not tlineLastInRound.clockedTruncation else '*'
+        specialChar = '*' if tlineLastInRound.clockedTruncation or tlineLastInRound.isNoPlay else ' '
         # append a 4-tuple for this player
         self.roundTuples[player].append((myColor, roundMins, waitMins, specialChar))
         

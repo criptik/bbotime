@@ -527,10 +527,36 @@ class TravParserCsv(TravParserBase):
                 if found and (line == '' or line == '#Substitutions'):
                     break
 
+        # first find if there are any robot pairs (~~mxxxxx)
+        # we only support one such backup robot name pair
+        self.backupRobNE = self.backupRobSW = None
+        csv_reader = csv.DictReader(travlines)
+        for row in csv_reader:
+            if row['North'].startswith('~~M'):
+                self.backupRobNE = row['North']
+                self.backupRobSW = row['South']
+                break;
+            if row['East'].startswith('~~M'):
+                self.backupRobNE = row['East']
+                self.backupRobSW = row['West']
+                break;
+
+        if self.backupRobNE is not None:
+            print(f'found robot names {self.backupRobNE} + {self.backupRobSW}', file=sys.stderr)
+                
         # now travlines can be read by csvreader
         csv_reader = csv.DictReader(travlines)
         # Iterate over each row after the header in the csv
         for row in csv_reader:
+            # sometimes the csv contains the name GiB rather than the unique robot name
+            # if this happens and there is only one robot pair, translate it
+            for dir in ['North', 'East']:
+                # print(dir, row[dir], file=sys.stderr)
+                if row[dir].lower() == 'gib' and self.backupRobNE is not None:
+                    row[dir] = self.backupRobNE
+                    row[partnerDir[dir]] = self.backupRobSW
+                    print(f"board {int(row['Board'])}, patched from GiB + GiB to {self.backupRobNE} + {self.backupRobSW}", file=sys.stderr)
+                    
             # row variable is a dict that represents a row in csv
             # pprint(row)
             # store so we can tell whether we support time
