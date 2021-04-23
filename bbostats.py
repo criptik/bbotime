@@ -54,6 +54,11 @@ class BboStatsReporter(BboBase):
                         continue
                     score = tline.nsScore if playerIdx in [0, 2] else 100-tline.nsScore
                     bucketNames = ['All Hands']   # everything goes in here
+                    # for interim scores add it to the appropriate 'thru' buckets
+                    round = int((bdnum-1)/self.args.bpr) + 1
+                    totalRounds = int(self.args.boards / self.args.bpr)
+                    for n in range(round, totalRounds+1):
+                        bucketNames.append(f'Thru Round {n:2}')
                     if tline.decl is None:
                         bucketNames.append('Passout or Avg')
                     else:
@@ -114,7 +119,12 @@ class BboStatsReporter(BboBase):
             for bucketName in sorted(bucketTable[player].keys(), reverse=True, key=vsScore):
                 if bucketName.startswith('vs.'):
                     bucketTable[player][bucketName].show(f'  {bucketName}', showCount=False)
-            
+
+            print()
+            for bucketName in sorted(bucketTable[player].keys()):
+                if bucketName.startswith('Thru '):
+                    bucketTable[player][bucketName].show(f'  {bucketName}', showCount=False)
+                    
         
 class BboStatsTravLine(BboTravLineBase):
     def __init__(self, bdnum, row, travParser):
