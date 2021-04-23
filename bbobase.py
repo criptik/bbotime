@@ -147,7 +147,10 @@ class BboBase(object):
         {self.childStyleInfo()}
         </style>
         ''')
-   
+
+    def childStyleInfo(self):
+        return ''
+    
     def printHTMLClosing(self):
         print('</pre></body></html>')
 
@@ -221,7 +224,7 @@ class BboTravLineBase(object):
         if self.args.debug:
             print(resstr, len(resstr))
         self.isNoPlay = False
-        if resstr.startswith('PASS') or resstr.startswith('A=='):
+        if resstr.startswith('PASS') or resstr.startswith('A'):
             # special case for passed out or averages
             self.contract = self.dblstr = self.decl = self.trumpstr = None
             self.result = 0
@@ -566,8 +569,9 @@ class TravParserCsv(TravParserBase):
             if bdnum > self.args.boards:
                 break
             else:
-                # 
-                row['Time'] = self.calcTimeVal(row)
+                #
+                if 'tstart' in self.args.__dict__.keys():
+                    row['Time'] = self.calcTimeVal(row)
                 travTableData[bdnum].append(row)
             
         
