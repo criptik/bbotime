@@ -21,6 +21,18 @@ class BboStatsReporter(BboBase):
     def addParserArgs(self, parser):
         pass
 
+    def roundTag(self, n):
+        return f'Thru Round {n:2}'
+
+    def rankString(self, rank):
+        map = {1:'st', 2:'nd', 3:'rd'}
+        if (rank % 100) in range(11,14):
+            suffix = 'th'
+        else:
+            lastDigit = rank % 10
+            suffix = map.get(lastDigit, 'th')
+        return f'{rank}{suffix}'
+    
     def childGenReport(self):
         map = {}
         players = {}
@@ -58,7 +70,7 @@ class BboStatsReporter(BboBase):
                     round = int((bdnum-1)/self.args.bpr) + 1
                     totalRounds = int(self.args.boards / self.args.bpr)
                     for n in range(round, totalRounds+1):
-                        bucketNames.append(f'Thru Round {n:2}')
+                        bucketNames.append(self.roundTag(n))
                     if tline.decl is None:
                         bucketNames.append('Passout or Avg')
                     else:
@@ -121,9 +133,22 @@ class BboStatsReporter(BboBase):
                     bucketTable[player][bucketName].show(f'  {bucketName}', showCount=False)
 
             print()
+            # build sorted rank lists for Thru Rounds
+            sortedRoundRanks = {}
+            totalRounds = int(self.args.boards / self.args.bpr)
+            for round in range(1, totalRounds + 1):
+                def thruScore(player):
+                    return bucketTable[player][self.roundTag(round)].avg()
+
+                sortedRoundRanks[round] = sorted(bucketTable.keys(), reverse=True, key=thruScore)
+                # print(round, sortedRoundRanks[round])
+
             for bucketName in sorted(bucketTable[player].keys()):
                 if bucketName.startswith('Thru '):
-                    bucketTable[player][bucketName].show(f'  {bucketName}', showCount=False)
+                    round = int(bucketName.split(' ')[3]);
+                    rank = 1 + sortedRoundRanks[round].index(player)
+                    rankTag = f'  {bucketName}   {self.rankString(rank)}'
+                    bucketTable[player][bucketName].show(rankTag, showCount=False)
                     
         
 class BboStatsTravLine(BboTravLineBase):
