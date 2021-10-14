@@ -522,6 +522,9 @@ class TravParserCsv(TravParserBase):
                 if line is None:
                     break
                 line = line.rstrip()
+                if line.startswith('#Title'):
+                    fields = line.split(',')
+                    self.args.title = fields[1]
                 # print(line)
                 if found:
                     travlines.append(line.lstrip('#'))

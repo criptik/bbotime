@@ -16,7 +16,7 @@ limitations under the License."""
 
 from ctypes import *
 
-dds = cdll.LoadLibrary("/usr/lib/libdds.so")
+dds = cdll.LoadLibrary("/usr/lib/x86_64-linux-gnu/libdds.so")
 if False:
     print('Loaded lib {0}'.format(dds))
 

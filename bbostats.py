@@ -100,6 +100,9 @@ class BboStatsReporter(BboBase):
                     # pprint(bucketTable)
 
 
+        # general info
+        print(f'\nTournament Name: {self.args.title} (from {self.args.dir})');
+        print(f'Boards:{self.args.boards}, Rounds:{totalRounds}');
         for player in sorted(bucketTable.keys(), reverse=True, key=allScore):
             partner = BboTravLineBase.origPartners[player]
             print(f'\n---------\n{player} & {partner}\n----------')
